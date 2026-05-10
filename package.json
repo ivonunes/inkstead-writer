@@ -1,0 +1,53 @@
+{
+  "name": "inkstead",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A small indie-web publishing engine for personal websites.",
+  "author": "Ivo Nunes",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ivonunes/inkstead"
+  },
+  "bin": {
+    "inkstead": "dist/cli/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "docs",
+    "LICENSE.txt"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-template-assets.mjs",
+    "docs": "node scripts/build-docs.mjs",
+    "test": "vitest run",
+    "dev": "tsc -w -p tsconfig.json"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@atproto/api": "^0.13.35",
+    "chokidar": "^4.0.3",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.7",
+    "gray-matter": "^4.0.3",
+    "liquidjs": "^10.21.1",
+    "markdown-it": "^14.1.0",
+    "sharp": "^0.34.5",
+    "typescript": "^5.7.2",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^22.10.2",
+    "vitest": "^2.1.8"
+  }
+}

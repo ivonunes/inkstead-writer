@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="{{ site.lang | default: "en" }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ meta.title }}</title>
+  {% if site.description %}<meta name="description" content="{{ site.description | escape }}">{% endif %}
+  <meta property="og:title" content="{{ meta.title | escape }}">
+  {% if site.description %}<meta property="og:description" content="{{ site.description | escape }}">{% endif %}
+  {% if meta.canonicalUrl %}<link rel="canonical" href="{{ meta.canonicalUrl }}"><meta property="og:url" content="{{ meta.canonicalUrl }}">{% endif %}
+  <link rel="alternate" type="application/rss+xml" title="{{ site.title | escape }} RSS" href="/feed.xml">
+  <link rel="alternate" type="application/feed+json" title="{{ site.title | escape }} JSON Feed" href="/feed.json">
+  {% if site.avatar %}<link rel="icon" href="{{ site.avatar }}">{% endif %}
+  {% for social in site.social %}{% if social.relMe or social.url contains "http" %}<link rel="me" href="{{ social.url }}">{% endif %}{% endfor %}
+  <style>
+    :root {
+      color-scheme: light;
+      --background: #fffdf9;
+      --surface: #fff;
+      --text: #232323;
+      --muted: #746f67;
+      --line: #e7ded1;
+      --accent: #2f4da3;
+      --accent-soft: #f2f4ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 18px/1.72 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background: var(--background);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    .site-header, main, .site-footer {
+      width: min(720px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+    .site-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 32px 0 20px;
+      border-bottom: 1px solid var(--line);
+    }
+    main { padding: 64px 0 84px; }
+    .site-footer {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 28px 0 42px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .site-footer p {
+      margin: 0;
+    }
+    .site-footer a {
+      color: var(--muted);
+    }
+    .site-footer a:hover {
+      color: var(--accent);
+    }
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 0.08em;
+      text-underline-offset: 0.18em;
+    }
+    a:hover { color: #142b78; }
+    img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 6px;
+    }
+    h1 {
+      margin: 0 0 30px;
+      font-size: clamp(2.25rem, 6vw, 3.9rem);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+    h2 {
+      margin-top: 44px;
+      font-size: 1.35rem;
+      line-height: 1.2;
+    }
+    p { margin: 0 0 1.25em; }
+    time { color: var(--muted); }
+    .site-title {
+      color: var(--text);
+      font-weight: 800;
+      font-size: 1.1rem;
+      text-decoration: none;
+    }
+    .site-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      font-size: 0.95rem;
+    }
+    .site-nav a {
+      color: var(--muted);
+      text-decoration: none;
+    }
+    .site-nav a:hover { color: var(--accent); }
+    .home-intro {
+      margin-bottom: 56px;
+    }
+    .home-intro h1 { margin-bottom: 14px; }
+    .home-intro p {
+      max-width: 34rem;
+      color: var(--muted);
+      font-size: 1.12rem;
+    }
+    .pagination {
+      display: flex;
+      gap: 10px;
+      margin-top: 48px;
+    }
+    .pagination a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      padding: 3px 11px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--text);
+      font-size: 0.95rem;
+      text-decoration: none;
+    }
+    .pagination a:hover {
+      border-color: #cfd8ff;
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+    .muted { color: var(--muted); }
+    .post-list {
+      display: grid;
+      gap: 34px;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .post-list li {
+      padding: 0 0 36px;
+      border-bottom: 1px solid var(--line);
+    }
+    .post-list li:last-child { border-bottom: 0; }
+    .post-title {
+      display: inline-block;
+      color: var(--text);
+      font-size: 1.45rem;
+      font-weight: 750;
+      line-height: 1.25;
+      text-decoration: none;
+    }
+    .post-title:hover {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+    .post-meta {
+      display: block;
+      margin-top: 4px;
+      font-size: 0.95rem;
+    }
+    a.post-meta {
+      width: max-content;
+      color: var(--muted);
+      text-decoration: none;
+    }
+    a.post-meta:hover {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+    .post-list .e-content {
+      margin-top: 0;
+      font-size: 1.04rem;
+    }
+    .post-list .e-content p:last-child { margin-bottom: 0; }
+    .note-card .post-meta { margin-top: 16px; }
+    .p-summary {
+      margin-top: 16px;
+      color: #3f3f3f;
+    }
+    .p-summary > :first-child { margin-top: 0; }
+    .p-summary > :last-child { margin-bottom: 0; }
+    .read-more { font-size: 0.95rem; }
+    .e-content {
+      margin-top: 32px;
+    }
+    .e-content > * + * { margin-top: 1.1em; }
+    .categories {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 36px;
+    }
+    .categories a {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    @media (max-width: 640px) {
+      .site-header {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .site-footer {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+      main { padding: 46px 0 64px; }
+      .home-intro { margin-bottom: 42px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header h-card">
+    <a class="site-title u-url p-name" href="/">{{ site.title }}</a>
+    {% if site.navigation.size > 0 or collections.pages.size > 0 %}
+    <nav class="site-nav" aria-label="Site">
+      {% if site.navigation.size > 0 %}
+      {% for item in site.navigation %}<a href="{{ item.url }}">{{ item.name }}</a>{% endfor %}
+      {% else %}
+      {% for page in collections.pages %}<a href="{{ page.urlPath }}">{{ page.title }}</a>{% endfor %}
+      {% endif %}
+    </nav>
+    {% endif %}
+  </header>
+  <main>{{ content }}</main>
+  <footer class="site-footer">
+    <p>&copy; {{ now.year }} {{ site.author }}</p>
+    <p><a href="/feed.xml">RSS feed</a></p>
+    {% unless config.theme.showPoweredBy == false %}
+    <p>Powered by <a href="https://inkstead.dev" target="_blank" rel="noopener noreferrer">Inkstead</a></p>
+    {% endunless %}
+  </footer>
+</body>
+</html>

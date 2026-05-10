@@ -1,0 +1,22 @@
+<article class="h-entry">
+  {% if post.title %}
+  <h1 class="p-name">{{ post.title }}</h1>
+  {% else %}
+  <data class="p-name" value="{{ post.displayTitle }}"></data>
+  {% endif %}
+  <time class="muted dt-published" datetime="{{ post.dateIso }}">{{ post.dateDisplay }}</time>
+  {% if post.lastmodIso %}<time class="dt-updated" hidden datetime="{{ post.lastmodIso }}">{{ post.lastmodDisplay }}</time>{% endif %}
+  <a class="u-url u-uid" hidden href="{{ post.urlPath }}">Permalink</a>
+  <a class="p-author h-card" hidden href="/">{{ site.author }}</a>
+  {% for photo in post.photos %}<img class="u-photo" src="/photos/{{ photo | split: "/" | last }}" alt="{{ post.alt | default: "" | escape }}">{% endfor %}
+  <div class="e-content">{{ post.html }}</div>
+  {% if post.categories.size > 0 %}
+  <p class="categories">{% for category in post.categoryLinks %}<a class="p-category" href="{{ category.url }}">#{{ category.name }}</a>{% endfor %}</p>
+  {% endif %}
+  {% if post.syndicationUrls.size > 0 %}
+  <section>
+    <h2>Also published on...</h2>
+    <ul>{% for url in post.syndicationUrls %}<li><a class="u-syndication" href="{{ url }}">{{ url }}</a></li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+</article>

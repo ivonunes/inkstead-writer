@@ -1,0 +1,27 @@
+<h1>{{ title }}</h1>
+<ul class="post-list">
+  {% for post in posts %}
+  <li class="h-entry {% unless post.title %}note-card{% endunless %}">
+    {% if post.title %}
+    <a class="post-title u-url p-name" href="{{ post.urlPath }}">{{ post.displayTitle }}</a>
+    <time class="post-meta dt-published" datetime="{{ post.dateIso }}">{{ post.dateDisplay }}</time>
+    <a class="p-author h-card" hidden href="/">{{ site.author }}</a>
+    {% if post.excerpt %}
+    <div class="p-summary">{{ post.excerpt }}</div>
+    {% if post.hasMore %}<p class="read-more"><a href="{{ post.urlPath }}">Continue reading</a></p>{% endif %}
+    {% endif %}
+    {% else %}
+    <data class="p-name" value="{{ post.displayTitle }}"></data>
+    <div class="e-content">{{ post.html }}</div>
+    <a class="post-meta u-url" href="{{ post.urlPath }}"><time class="dt-published" datetime="{{ post.dateIso }}">{{ post.dateDisplay }}</time></a>
+    <a class="p-author h-card" hidden href="/">{{ site.author }}</a>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% if pagination.total > 1 %}
+<nav class="pagination" aria-label="Pagination">
+  {% if pagination.previousUrl %}<a href="{{ pagination.previousUrl }}">Newer</a>{% endif %}
+  {% if pagination.nextUrl %}<a href="{{ pagination.nextUrl }}">Older</a>{% endif %}
+</nav>
+{% endif %}
