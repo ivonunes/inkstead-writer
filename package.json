@@ -9,6 +9,7 @@
     "type": "git",
     "url": "https://github.com/ivonunes/inkstead"
   },
+  "homepage": "https://inkstead.dev",
   "bin": {
     "inkstead": "dist/cli/index.js"
   },
