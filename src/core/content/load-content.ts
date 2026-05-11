@@ -316,9 +316,12 @@ export function groupPostsByCategory(posts: NormalizedPost[]): CategoryCollectio
 export function normalizePage(parsed: ParsedMarkdown, config: InksteadConfig): NormalizedPage {
   const title = typeof parsed.frontmatter.title === "string" ? parsed.frontmatter.title : parsed.slug;
   const urlPath = `/${parsed.slug}/`;
+  const excerpt = excerptData(parsed, config);
   return {
     ...parsed,
     title,
+    summary: excerpt.summary,
+    excerpt: excerpt.excerpt,
     urlPath,
     canonicalUrl: `${cleanBaseUrl(config.site.url)}${urlPath}`
   };

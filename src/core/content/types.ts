@@ -42,6 +42,8 @@ export interface CategoryCollection {
 
 export interface NormalizedPage extends ParsedMarkdown {
   title: string;
+  summary?: string;
+  excerpt: string;
   urlPath: string;
   canonicalUrl: string;
 }

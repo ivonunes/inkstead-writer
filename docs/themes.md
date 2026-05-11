@@ -90,6 +90,8 @@ Templates receive:
 - `meta`
 - `now`, including `now.year`
 
+`meta` includes `title`, `canonicalUrl`, and `description`. Post and page pages use an excerpt of their own content for `meta.description`; index and category pages use `site.description`.
+
 Post objects include `previous` and `next` so themes can add post navigation without the default templates rendering it.
 
 `photoPosts` is intended for building a photography-style grid. It includes photo notes whose primary image is not a PNG, so screenshots and other PNG notes do not appear there by default.

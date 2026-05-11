@@ -62,10 +62,17 @@ function serializePost(post: NormalizedPost): Record<string, unknown> {
   };
 }
 
+function serializePage(page: NormalizedPage): Record<string, unknown> {
+  return {
+    ...page,
+    excerpt: page.excerpt
+  };
+}
+
 function serializeCollections(collections: TemplateCollections): Record<string, unknown> {
   return {
     posts: collections.allPosts.map(serializePost),
-    pages: collections.pages,
+    pages: collections.pages.map(serializePage),
     categories: collections.categories,
     photoPosts: collections.photoPosts.map(serializePost)
   };
@@ -86,7 +93,7 @@ export function createTemplateRenderer(root: string, config: InksteadConfig, col
       config,
       collections: serializeCollections(collections),
       posts: collections.allPosts.map(serializePost),
-      pages: collections.pages,
+      pages: collections.pages.map(serializePage),
       categories: collections.categories,
       photoPosts: collections.photoPosts.map(serializePost),
       now: {
@@ -116,11 +123,15 @@ export function createTemplateRenderer(root: string, config: InksteadConfig, col
     return plainTextFromHtml(post.excerpt) || config.site.description;
   }
 
+  function metaDescriptionForPage(page: NormalizedPage): string | undefined {
+    return plainTextFromHtml(page.excerpt) || config.site.description;
+  }
+
   return {
     home: (posts, pagination, title) => renderBody("home", {
       title,
       posts: posts.map(serializePost),
-      pages: collections.pages,
+      pages: collections.pages.map(serializePage),
       categories: collections.categories,
       photoPosts: collections.photoPosts.map(serializePost),
       pagination,
@@ -130,7 +141,7 @@ export function createTemplateRenderer(root: string, config: InksteadConfig, col
       title: `#${category.name}`,
       category,
       posts: posts.map(serializePost),
-      pages: collections.pages,
+      pages: collections.pages.map(serializePage),
       categories: collections.categories,
       photoPosts: collections.photoPosts.map(serializePost),
       pagination,
@@ -141,8 +152,8 @@ export function createTemplateRenderer(root: string, config: InksteadConfig, col
       meta: meta(titleForPost(post), post.canonicalUrl, metaDescriptionForPost(post))
     }),
     page: (page) => renderBody(pageTemplate(page), {
-      page,
-      meta: meta(page.title, page.canonicalUrl)
+      page: serializePage(page),
+      meta: meta(page.title, page.canonicalUrl, metaDescriptionForPage(page))
     })
   };
 }

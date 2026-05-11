@@ -237,6 +237,9 @@ export default defineConfig({
     expect(postHtml).toContain("<br>");
     expect(postHtml).toContain('<meta name="description" content="Raw 2 Line one Line two">');
     expect(postHtml).not.toContain('<meta name="description" content="Desc">');
+    const aboutHtml = await fs.readFile(path.join(site, "build/about/index.html"), "utf8");
+    expect(aboutHtml).toContain('<meta name="description" content="This is my website.">');
+    expect(aboutHtml).not.toContain('<meta name="description" content="Desc">');
   });
 
   it("can hide the default powered-by footer link", async () => {

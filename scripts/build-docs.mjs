@@ -45,7 +45,6 @@ const navGroups = [
   {
     title: "Extra",
     pages: [
-      { slug: "obsidian", file: "obsidian.md" },
       { slug: "troubleshooting", file: "troubleshooting.md" },
       { slug: "upgrading", file: "upgrading.md" }
     ]

@@ -1,8 +1,8 @@
 {
   "name": "inkstead",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
-  "description": "A small indie-web publishing engine for personal websites.",
+  "description": "An opinionated publishing engine for personal indie websites",
   "author": "Ivo Nunes",
   "license": "MIT",
   "repository": {
