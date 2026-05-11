@@ -54,12 +54,12 @@ date: 2026-05-10T18:30:00+01:00
 
 Morning coffee.
 
-![](/photos/coffee.jpg)
+![](/media/coffee.jpg)
 ```
 
-You can keep original files in `content/photos` and reference the public path you want your theme to render.
+You can keep original files in `content/media` and reference the public path you want your theme to render.
 
-During builds, Inkstead copies `content/photos` to `/photos/`, resizes very large images to a reasonable web size, and strips metadata from the copied files. Your originals in `content/photos` are left unchanged. Passthrough assets are not optimized.
+During builds, Inkstead copies `content/media` to `/media/`, resizes very large images to a reasonable web size, and strips metadata from the copied files. Your originals in `content/media` are left unchanged. Passthrough assets are not optimized.
 
 You can tune or disable this in `site.config.ts`:
 

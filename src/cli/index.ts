@@ -13,7 +13,7 @@ import { initSite, type InitSiteOptions } from "../core/init.js";
 import { renderRequirements } from "../core/requirements.js";
 import { syndicateSite } from "../core/syndication/syndicate.js";
 import { ejectTheme } from "../core/templates/eject.js";
-import type { CiProviderName, DeployProviderName, SyndicationProviderName } from "../core/config/types.js";
+import type { CiProviderName, DeployProviderName, SyndicationProviderName, WriterProviderName } from "../core/config/types.js";
 
 const program = new Command();
 program.name("inkstead");
@@ -55,6 +55,17 @@ const ciChoices: Record<string, CiProviderName | "none"> = {
   "2": "gitlab-ci",
   "3": "none"
 };
+
+const writerProviderChoices: Record<string, Exclude<WriterProviderName, "local">> = {
+  "1": "github",
+  "2": "gitlab"
+};
+
+function inferredWriterProvider(ci: CiProviderName | "none" | undefined): Exclude<WriterProviderName, "local"> | undefined {
+  if (ci === "github-actions") return "github";
+  if (ci === "gitlab-ci") return "gitlab";
+  return undefined;
+}
 
 async function promptInitOptions(directory?: string): Promise<InitSiteOptions> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
@@ -102,6 +113,26 @@ async function promptInitOptions(directory?: string): Promise<InitSiteOptions> {
       .filter(Boolean)
       .map((item) => syndicationChoices[item] ?? item)
       .filter((item): item is SyndicationProviderName => ["mastodon", "bluesky", "flickr"].includes(item)))];
+
+    const writerAnswer = (await rl.question("Enable Inkstead Writer? [y/N]: ")).trim().toLowerCase();
+    if (writerAnswer === "y" || writerAnswer === "yes") {
+      let provider = inferredWriterProvider(options.ci);
+      if (!provider) {
+        console.log("Choose Writer repository provider:");
+        console.log("  1. GitHub");
+        console.log("  2. GitLab");
+        const providerAnswer = (await rl.question("Writer provider [1]: ")).trim() || "1";
+        provider = writerProviderChoices[providerAnswer] ?? "github";
+      } else {
+        console.log(`Writer will use ${provider === "github" ? "GitHub" : "GitLab"} based on your CI choice.`);
+      }
+      let owner = "";
+      while (!owner) owner = (await rl.question(`${provider === "github" ? "GitHub" : "GitLab"} owner or group: `)).trim();
+      const repoFallback = directory && directory !== "." ? directory : "my-website";
+      const repo = (await rl.question(`Repository name [${repoFallback}]: `)).trim() || repoFallback;
+      const branch = (await rl.question("Branch [main]: ")).trim() || "main";
+      options.writer = { enabled: true, provider, owner, repo, branch };
+    }
 
     return options;
   } finally {

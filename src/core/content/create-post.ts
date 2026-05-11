@@ -2,6 +2,7 @@ import path from "node:path";
 import { existsSync } from "node:fs";
 import type { InksteadConfig, SyndicationProviderName } from "../config/types.js";
 import { writeFileEnsured } from "../../utils/fs.js";
+import { slugForNewPost } from "../../writer/app/core/posts.js";
 
 export type NewPostKind = "article" | "note";
 
@@ -27,21 +28,6 @@ function localIso(date: Date): string {
   const sign = offsetMinutes >= 0 ? "+" : "-";
   const absoluteOffset = Math.abs(offsetMinutes);
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}${sign}${pad(Math.floor(absoluteOffset / 60))}:${pad(absoluteOffset % 60)}`;
-}
-
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 80);
-}
-
-function noteSlug(text: string, date: Date): string {
-  const words = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-  return slugify(words.split(" ").slice(0, 8).join(" ")) || `${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
 }
 
 function quoteYaml(value: string): string {
@@ -82,8 +68,8 @@ export async function createPost(root: string, config: InksteadConfig, options: 
   if (options.kind === "article" && !title) throw new Error("Article posts require a title.");
   if (options.kind === "note" && !text) throw new Error("Note posts require text.");
 
-  const slug = options.kind === "article" ? slugify(title ?? "") : noteSlug(text ?? "", date);
-  const filename = `${datePrefix}-${slug || "post"}.md`;
+  const slug = options.kind === "article" ? slugForNewPost(title, "", date) : slugForNewPost("", text, date);
+  const filename = `${slug || `${datePrefix}-post`}.md`;
   const relativePath = uniquePath(root, path.join(postsDir, filename));
   const body = options.kind === "note" ? `${text}\n` : "\n";
   const fields: Array<[string, string]> = options.kind === "article"

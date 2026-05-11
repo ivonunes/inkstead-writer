@@ -11,13 +11,15 @@ npm run doctor
 npm run dev
 ```
 
-During `init`, Inkstead asks where you want to deploy, whether you want automated publishing, and whether posts should syndicate to social media. You can start small and add more later in `site.config.ts`.
+During `init`, Inkstead asks where you want to deploy, whether you want automated publishing, whether posts should syndicate to social media, and whether you want to enable Writer. You can start small and add more later in `site.config.ts`.
+
+![A starter Inkstead website running locally.](/assets/getting-started-site.png)
 
 Open the local URL printed by `npm run dev`, then edit the starter content:
 
 - `content/posts` contains dated posts for your homepage and feeds.
 - `content/pages` contains standalone pages like About or Now.
-- `content/photos` contains original photo files you want to keep with the site.
+- `content/media` contains original photo files you want to keep with the site.
 
 ## Your First Post
 

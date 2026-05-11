@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { beforeEach, describe, expect, it } from "vitest";
 import { buildSite, createPost, ejectTheme, initSite, loadConfig, renderRequirements, runDoctor, updateSyndicationFrontmatter } from "../src/index.js";
 import { loadPosts } from "../src/core/content/load-content.js";
@@ -8,6 +9,19 @@ import { textForSyndication } from "../src/core/syndication/text.js";
 import { cloudflareWorkersProvider } from "../src/adapters/deploy/cloudflare-workers.js";
 import sharp from "sharp";
 import { prepareImageForSyndication } from "../src/core/syndication/media.js";
+import { parsePostMarkdown, serializePostMarkdown } from "../src/writer/app/core/frontmatter.js";
+import { buildPostMarkdown, formatPostDate, postDateSortValue, postExcerpt, postListLabel, postStatusLabel, slugForNewPost, slugifyTitle, summarizePost } from "../src/writer/app/core/posts.js";
+import { extractMarkdownImageReferences } from "../src/writer/app/core/markdown.js";
+import { markdownMediaReference, mediaAssetPath, referencedMediaPaths, uniqueAssetFilename } from "../src/writer/app/core/assets.js";
+import { copyWriterApp } from "../src/core/writer/build.js";
+import { publicWriterConfig, resolveWriterConfig } from "../src/core/writer/config.js";
+import { GitHubRepositoryAdapter } from "../src/writer/app/adapters/github.js";
+import { GitLabRepositoryAdapter } from "../src/writer/app/adapters/gitlab.js";
+import { contentType, localWriterConfig, staticFilePath } from "../src/core/dev.js";
+import { handleWriterLocalApi } from "../src/core/writer/local-api.js";
+import { syndicationProviders } from "../src/core/adapters/registry.js";
+import { syndicateSite } from "../src/core/syndication/syndicate.js";
+import { previewTitle } from "../src/writer/app/routes/Preview.js";
 
 let tempRoot: string;
 
@@ -100,6 +114,31 @@ describe("init", () => {
     expect(workflow).toContain("syndicate:");
     expect(workflow).toContain("redeploy-pages:");
   });
+
+  it("scaffolds Writer repository settings when enabled", async () => {
+    const site = path.join(tempRoot, "site");
+    await initSite(site, {
+      ci: "github-actions",
+      deploy: "github-pages",
+      syndication: [],
+      writer: {
+        enabled: true,
+        provider: "github",
+        owner: "ivonunes",
+        repo: "my-site",
+        branch: "main"
+      }
+    });
+    const config = await fs.readFile(path.join(site, "site.config.ts"), "utf8");
+    expect(config).toContain('"writer": {');
+    expect(config).toContain('"provider": "github"');
+    expect(config).toContain('"owner": "ivonunes"');
+    expect(config).toContain('"repo": "my-site"');
+    expect(config).toContain('"branch": "main"');
+    expect(config).not.toContain('"postsPath": "content/posts"');
+    expect(config).not.toContain('"mediaPath": "content/media"');
+    expect(config).not.toContain('"path": "/writer"');
+  });
 });
 
 describe("content and build", () => {
@@ -121,8 +160,8 @@ describe("content and build", () => {
 
   it("loads config, infers post kinds, and builds static output", async () => {
     const site = await makeSite();
-    await fs.mkdir(path.join(site, "content/photos/2026"), { recursive: true });
-    await fs.writeFile(path.join(site, "content/photos/2026/coffee.jpg"), "fake");
+    await fs.mkdir(path.join(site, "content/media/2026"), { recursive: true });
+    await fs.writeFile(path.join(site, "content/media/2026/coffee.jpg"), "fake");
     await fs.writeFile(path.join(site, "content/posts/2026-05-10-photo.md"), "---\ndate: 2026-05-10T18:30:00+01:00\nlastmod: 2026-05-11T18:30:00+01:00\nsyndication:\n  - https://bsky.app/example\n---\n\nMorning coffee.  \n![](/uploads/coffee.jpg)\n");
     const config = await loadConfig(site);
     const posts = await loadPosts(site, config);
@@ -150,21 +189,21 @@ describe("content and build", () => {
 
   it("uses inferred body images as syndication photos", async () => {
     const site = await makeSite();
-    await fs.mkdir(path.join(site, "content/photos"), { recursive: true });
-    await fs.writeFile(path.join(site, "content/photos/sample.jpg"), "fake");
-    await fs.writeFile(path.join(site, "content/posts/2026-05-12-photo-note.md"), "---\ndate: 2026-05-12T18:30:00+01:00\nsyndicate:\n  - mastodon\n  - bluesky\n---\n\nThinking about notes with photos...\n\n![](/photos/sample.jpg)\n");
+    await fs.mkdir(path.join(site, "content/media"), { recursive: true });
+    await fs.writeFile(path.join(site, "content/media/sample.jpg"), "fake");
+    await fs.writeFile(path.join(site, "content/posts/2026-05-12-photo-note.md"), "---\ndate: 2026-05-12T18:30:00+01:00\nsyndicate:\n  - mastodon\n  - bluesky\n---\n\nThinking about notes with photos...\n\n![](/media/sample.jpg)\n");
     const config = await loadConfig(site);
     const post = (await loadPosts(site, config)).find((item) => item.slug === "2026-05-12-photo-note");
     expect(post?.kind).toBe("photo-note");
-    expect(post?.firstImage).toBe("/photos/sample.jpg");
+    expect(post?.firstImage).toBe("/media/sample.jpg");
     expect(post?.photos).toEqual([]);
-    expect(post?.sourcePhotos).toEqual([path.join(site, "content/photos/sample.jpg")]);
+    expect(post?.sourcePhotos).toEqual([path.join(site, "content/media/sample.jpg")]);
     expect(post ? textForSyndication(post) : "").toBe("Thinking about notes with photos...");
   });
 
   it("renders markdown notes as social-friendly syndication text", async () => {
     const site = await makeSite();
-    await fs.writeFile(path.join(site, "content/posts/2026-05-13-markdown-note.md"), "---\ndate: 2026-05-13T18:30:00+01:00\nsyndicate:\n  - mastodon\n---\n\nThinking about **bold** and _italic_ notes with a [link](https://example.com/post).\n\n`code` is okay.\n\n![](/photos/sample.jpg)\n");
+    await fs.writeFile(path.join(site, "content/posts/2026-05-13-markdown-note.md"), "---\ndate: 2026-05-13T18:30:00+01:00\nsyndicate:\n  - mastodon\n---\n\nThinking about **bold** and _italic_ notes with a [link](https://example.com/post).\n\n`code` is okay.\n\n![](/media/sample.jpg)\n");
     const config = await loadConfig(site);
     const post = (await loadPosts(site, config)).find((item) => item.slug === "2026-05-13-markdown-note");
     expect(post ? textForSyndication(post) : "").toBe("Thinking about bold and italic notes with a link (https://example.com/post).\n\ncode is okay.");
@@ -175,7 +214,7 @@ describe("content and build", () => {
     await fs.writeFile(path.join(site, "site.config.ts"), `import { defineConfig } from "inkstead";
 export default defineConfig({
   site: { title: "My Website", url: "https://example.com", author: "Your Name" },
-  content: { posts: "content/posts", pages: "content/pages", photos: "content/photos" },
+  content: { posts: "content/posts", pages: "content/pages", media: "content/media" },
   syndication: { providers: ["mastodon", "bluesky", "flickr"] }
 });`);
     const result = await createPost(site, await loadConfig(site), {
@@ -205,6 +244,16 @@ export default defineConfig({
     expect(post).not.toContain("title:");
   });
 
+  it("uses the Writer slug rules for CLI note filenames", async () => {
+    const site = await makeSite();
+    const config = await loadConfig(site);
+    const date = new Date(2026, 4, 10, 12, 30);
+    const note = await createPost(site, config, { kind: "note", text: "📍 Tokyo, Japan\n\nLess **duct tape**, more <em>website</em>.", date });
+    const emojiOnly = await createPost(site, config, { kind: "note", text: "✨📷", date });
+    expect(note.relativePath).toBe("content/posts/2026-05-10-tokyo-japan-less-duct-tape-more-website.md");
+    expect(emojiOnly.relativePath).toBe("content/posts/2026-05-10-untitled-1230.md");
+  });
+
   it("supports output paths, asset passthrough, raw HTML, hard breaks, and pagination", async () => {
     const site = await makeSite();
     await fs.mkdir(path.join(site, "public/assets"), { recursive: true });
@@ -215,7 +264,7 @@ export default defineConfig({
     await fs.writeFile(path.join(site, "site.config.ts"), `import { defineConfig } from "inkstead";
 export default defineConfig({
   site: { title: "My Website", url: "https://example.com", author: "Your Name", description: "Desc", social: [{ name: "Me", url: "https://bsky.app/profile/example.com" }] },
-  content: { posts: "content/posts", pages: "content/pages", photos: "content/photos" },
+  content: { posts: "content/posts", pages: "content/pages", media: "content/media" },
   build: { output: "build" },
   markdown: { html: true, breaks: true },
   assets: { passthrough: [{ from: "public", to: "." }] },
@@ -242,12 +291,52 @@ export default defineConfig({
     expect(aboutHtml).not.toContain('<meta name="description" content="Desc">');
   });
 
+  it("copies the Writer app and public config when enabled", async () => {
+    const site = await makeSite();
+    const writerDist = path.join(tempRoot, "writer-dist");
+    const dist = path.join(site, "dist");
+    await fs.mkdir(path.join(writerDist, "assets"), { recursive: true });
+    await fs.writeFile(path.join(writerDist, "index.html"), "<div id=\"root\"></div>");
+    await fs.writeFile(path.join(writerDist, "assets/app.js"), "console.log('writer')");
+    const config = await loadConfig(site);
+    config.writer = {
+      enabled: true,
+      path: "/writer",
+      provider: "github",
+      owner: "example",
+      repo: "site",
+      branch: "main"
+    };
+
+    await copyWriterApp(dist, config, { writerDist });
+
+    await expect(fs.stat(path.join(dist, "writer/index.html"))).resolves.toBeTruthy();
+    await expect(fs.stat(path.join(dist, "writer/assets/app.js"))).resolves.toBeTruthy();
+    const publicConfig = JSON.parse(await fs.readFile(path.join(dist, "writer/inkstead-writer.config.json"), "utf8"));
+    expect(publicConfig).toEqual({
+      provider: "github",
+      owner: "example",
+      repo: "site",
+      branch: "main",
+      postsPath: "content/posts",
+      mediaPath: "content/media"
+    });
+    expect(JSON.stringify(publicConfig)).not.toContain("token");
+  });
+
+  it("does not copy Writer output when Writer is disabled", async () => {
+    const site = await makeSite();
+    const config = await loadConfig(site);
+    await copyWriterApp(path.join(site, "dist"), config, { writerDist: path.join(tempRoot, "missing") });
+    await expect(fs.stat(path.join(site, "dist/writer"))).rejects.toThrow();
+  });
+
   it("can hide the default powered-by footer link", async () => {
     const site = await makeSite();
     await fs.writeFile(path.join(site, "site.config.ts"), `import { defineConfig } from "inkstead";
 export default defineConfig({
   site: { title: "My Website", url: "https://example.com", author: "Your Name" },
-  content: { posts: "content/posts", pages: "content/pages", photos: "content/photos" },
+  content: { posts: "content/posts", pages: "content/pages", media: "content/media" },
   theme: { showPoweredBy: false }
 });`);
     await buildSite(site, await loadConfig(site));
@@ -257,8 +346,8 @@ export default defineConfig({
 
   it("optimizes content photos during site builds by default", async () => {
     const site = await makeSite();
-    await fs.mkdir(path.join(site, "content/photos"), { recursive: true });
-    await fs.writeFile(path.join(site, "content/photos/large.jpg"), await sharp({
+    await fs.mkdir(path.join(site, "content/media"), { recursive: true });
+    await fs.writeFile(path.join(site, "content/media/large.jpg"), await sharp({
       create: {
         width: 1600,
         height: 1200,
@@ -269,12 +358,12 @@ export default defineConfig({
     await fs.writeFile(path.join(site, "site.config.ts"), `import { defineConfig } from "inkstead";
 export default defineConfig({
   site: { title: "My Website", url: "https://example.com", author: "Your Name" },
-  content: { posts: "content/posts", pages: "content/pages", photos: "content/photos" },
+  content: { posts: "content/posts", pages: "content/pages", media: "content/media" },
   photos: { maxWidth: 500, maxHeight: 500, quality: 76 }
 });`);
 
     await buildSite(site, await loadConfig(site));
-    const metadata = await sharp(path.join(site, "dist/photos/large.jpg")).metadata();
+    const metadata = await sharp(path.join(site, "dist/media/large.jpg")).metadata();
     expect(metadata.width).toBe(500);
     expect(metadata.height).toBe(375);
     expect(metadata.exif).toBeUndefined();
@@ -282,8 +371,8 @@ export default defineConfig({
 
   it("can disable built image optimization", async () => {
     const site = await makeSite();
-    await fs.mkdir(path.join(site, "content/photos"), { recursive: true });
-    await fs.writeFile(path.join(site, "content/photos/large.jpg"), await sharp({
+    await fs.mkdir(path.join(site, "content/media"), { recursive: true });
+    await fs.writeFile(path.join(site, "content/media/large.jpg"), await sharp({
       create: {
         width: 1600,
         height: 1200,
@@ -294,12 +383,12 @@ export default defineConfig({
     await fs.writeFile(path.join(site, "site.config.ts"), `import { defineConfig } from "inkstead";
 export default defineConfig({
   site: { title: "My Website", url: "https://example.com", author: "Your Name" },
-  content: { posts: "content/posts", pages: "content/pages", photos: "content/photos" },
+  content: { posts: "content/posts", pages: "content/pages", media: "content/media" },
   photos: { optimize: false, maxWidth: 500, maxHeight: 500 }
 });`);
 
     await buildSite(site, await loadConfig(site));
-    const metadata = await sharp(path.join(site, "dist/photos/large.jpg")).metadata();
+    const metadata = await sharp(path.join(site, "dist/media/large.jpg")).metadata();
     expect(metadata.width).toBe(1600);
     expect(metadata.height).toBe(1200);
   });
@@ -318,7 +407,7 @@ export default defineConfig({
     await fs.writeFile(path.join(site, "site.config.ts"), `import { defineConfig } from "inkstead";
 export default defineConfig({
   site: { title: "My Website", url: "https://example.com", author: "Your Name" },
-  content: { posts: "content/posts", pages: "content/pages", photos: "content/photos" },
+  content: { posts: "content/posts", pages: "content/pages", media: "content/media" },
   assets: {
     passthrough: [{ from: "public", to: "." }]
   },
@@ -336,7 +425,7 @@ export default defineConfig({
     await fs.writeFile(path.join(site, "site.config.ts"), `import { defineConfig } from "inkstead";
 export default defineConfig({
   site: { title: "My Website", url: "https://example.com", author: "Your Name" },
-  content: { posts: "content/posts", pages: "content/pages", photos: "content/photos" },
+  content: { posts: "content/posts", pages: "content/pages", media: "content/media" },
   hooks: { beforeBuild: ["node ./write-asset.mjs"] },
   assets: { passthrough: [{ from: "public", to: "." }] }
 });`);
@@ -355,7 +444,7 @@ await writeFile("public/assets/scripts/application.js", "window.inksteadHook = t
     await fs.writeFile(path.join(site, "site.config.ts"), `import { defineConfig } from "inkstead";
 export default defineConfig({
   site: { title: "My Website", url: "https://example.com", author: "Your Name" },
-  content: { posts: "content/posts", pages: "content/pages", photos: "content/photos" },
+  content: { posts: "content/posts", pages: "content/pages", media: "content/media" },
   pagination: { postsPerPage: 2 }
 });`);
     const config = await loadConfig(site);
@@ -415,6 +504,47 @@ export default defineConfig({
     expect(home).toContain("Continue reading");
   });
 
+  it("excludes draft posts from content, site output, feeds, sitemap, and syndication", async () => {
+    const site = await makeSite();
+    await fs.writeFile(path.join(site, "site.config.ts"), `import { defineConfig } from "inkstead";
+export default defineConfig({
+  site: { title: "My Website", url: "https://example.com", author: "Your Name" },
+  content: { posts: "content/posts", pages: "content/pages", media: "content/media" },
+  syndication: { providers: ["mastodon"] }
+});`);
+    await fs.writeFile(path.join(site, "content/posts/2026-09-20-published.md"), "---\ntitle: Public Post\ndate: 2026-09-20T18:30:00+01:00\n---\n\nVisible.\n");
+    await fs.writeFile(path.join(site, "content/posts/2026-09-21-draft.md"), "---\ntitle: Hidden Draft\ndate: 2026-09-21T18:30:00+01:00\nstatus: draft\nsyndicate:\n  - mastodon\n---\n\nShould stay private.\n");
+
+    const config = await loadConfig(site);
+    const posts = await loadPosts(site, config);
+    expect(posts.map((post) => post.title)).toContain("Public Post");
+    expect(posts.map((post) => post.title)).not.toContain("Hidden Draft");
+
+    await buildSite(site, config);
+    const home = await fs.readFile(path.join(site, "dist/index.html"), "utf8");
+    const feed = await fs.readFile(path.join(site, "dist/feed.xml"), "utf8");
+    const sitemap = await fs.readFile(path.join(site, "dist/sitemap.xml"), "utf8");
+    expect(home).not.toContain("Hidden Draft");
+    expect(feed).not.toContain("Hidden Draft");
+    expect(sitemap).not.toContain("draft");
+    await expect(fs.stat(path.join(site, "dist/2026/09/21/draft/index.html"))).rejects.toThrow();
+
+    let published = false;
+    const originalPublish = syndicationProviders.mastodon.publish;
+    syndicationProviders.mastodon.publish = async () => {
+      published = true;
+      return { status: "published" };
+    };
+    try {
+      const result = await syndicateSite(site, config);
+      expect(result.published).toBe(0);
+      expect(result.changed).toBe(false);
+      expect(published).toBe(false);
+    } finally {
+      syndicationProviders.mastodon.publish = originalPublish;
+    }
+  });
+
   it("allows a theme to override the homepage with category links instead of posts", async () => {
     const site = await makeSite();
     await fs.mkdir(path.join(site, "theme"), { recursive: true });
@@ -432,21 +562,21 @@ export default defineConfig({
 
   it("excludes PNG photo notes from the photoPosts theme collection", async () => {
     const site = await makeSite();
-    await fs.writeFile(path.join(site, "content/posts/2026-10-01-photo.md"), "---\ndate: 2026-10-01T18:30:00+01:00\n---\n\n![](/photos/camera.jpg)\n");
-    await fs.writeFile(path.join(site, "content/posts/2026-10-02-screenshot.md"), "---\ndate: 2026-10-02T18:30:00+01:00\n---\n\n![](/photos/screenshot.png)\n");
+    await fs.writeFile(path.join(site, "content/posts/2026-10-01-photo.md"), "---\ndate: 2026-10-01T18:30:00+01:00\n---\n\n![](/media/camera.jpg)\n");
+    await fs.writeFile(path.join(site, "content/posts/2026-10-02-screenshot.md"), "---\ndate: 2026-10-02T18:30:00+01:00\n---\n\n![](/media/screenshot.png)\n");
     await fs.mkdir(path.join(site, "theme"), { recursive: true });
     await fs.writeFile(path.join(site, "theme/home.liquid"), `<ul>{% for post in photoPosts %}<li>{{ post.firstImage }}</li>{% endfor %}</ul>`);
 
     await buildSite(site, await loadConfig(site));
     const home = await fs.readFile(path.join(site, "dist/index.html"), "utf8");
-    expect(home).toContain("/photos/camera.jpg");
-    expect(home).not.toContain("/photos/screenshot.png");
+    expect(home).toContain("/media/camera.jpg");
+    expect(home).not.toContain("/media/screenshot.png");
   });
 
   it("uses a page-specific theme template when one matches the page slug", async () => {
     const site = await makeSite();
     await fs.writeFile(path.join(site, "content/pages/photos.md"), "---\ntitle: Photos\n---\n\nGallery intro.\n");
-    await fs.writeFile(path.join(site, "content/posts/2026-10-01-photo.md"), "---\ndate: 2026-10-01T18:30:00+01:00\n---\n\n![](/photos/camera.jpg)\n");
+    await fs.writeFile(path.join(site, "content/posts/2026-10-01-photo.md"), "---\ndate: 2026-10-01T18:30:00+01:00\n---\n\n![](/media/camera.jpg)\n");
     await fs.mkdir(path.join(site, "theme"), { recursive: true });
     await fs.writeFile(path.join(site, "theme/photos.liquid"), `<h1>{{ page.title }}</h1>
 <p>{{ page.html }}</p>
@@ -455,11 +585,619 @@ export default defineConfig({
     await buildSite(site, await loadConfig(site));
     const photos = await fs.readFile(path.join(site, "dist/photos/index.html"), "utf8");
     const about = await fs.readFile(path.join(site, "dist/about/index.html"), "utf8");
-    expect(photos).toContain("/photos/camera.jpg");
+    expect(photos).toContain("/media/camera.jpg");
     expect(photos).toContain("Gallery intro.");
-    expect(about).not.toContain("/photos/camera.jpg");
+    expect(about).not.toContain("/media/camera.jpg");
   });
 });
+
+describe("writer core", () => {
+  it("parses and serializes Writer frontmatter", () => {
+    const parsed = parsePostMarkdown("---\ntitle: \"A Post\"\nstatus: draft\nupdated_at: 2026-05-11T10:00:00.000Z\n---\n\nBody");
+    expect(parsed.frontmatter.title).toBe("A Post");
+    expect(parsed.frontmatter.status).toBe("draft");
+    expect(parsed.body).toBe("Body");
+    expect(serializePostMarkdown(parsed.frontmatter, parsed.body)).toContain("title: \"A Post\"");
+  });
+
+  it("generates dated slugs from titles and untitled post content", () => {
+    expect(slugifyTitle("Café & Notes!")).toBe("cafe-and-notes");
+    expect(slugForNewPost("Less Duct Tape, More Website", "", new Date("2026-05-11T09:04:00"))).toBe("2026-05-11-less-duct-tape-more-website");
+    expect(slugForNewPost("", "Less **duct tape**, more <em>website</em>.", new Date("2026-05-11T09:04:00"))).toBe("2026-05-11-less-duct-tape-more-website");
+    expect(slugForNewPost("", "📍 Tokyo, Japan 📷 Nikon F2", new Date("2026-05-11T09:04:00"))).toBe("2026-05-11-tokyo-japan-nikon-f2");
+    expect(slugForNewPost("", "✨📷", new Date("2026-05-11T09:04:00"))).toBe("2026-05-11-untitled-0904");
+    expect(slugForNewPost("", "", new Date("2026-05-11T09:04:00"))).toBe("2026-05-11-untitled-0904");
+  });
+
+  it("uses note content as the Writer post list label when there is no title", () => {
+    expect(postExcerpt("A small note with a [link](https://example.com).\n\n![](/media/a.jpg)")).toBe("A small note with a link.");
+    expect(postExcerpt("First line\nSecond line")).toBe("First line Second line");
+    expect(postExcerpt("📍 New York, USA 📷 iPhone 16 Pro <img src=\"/media/img0931.jpeg\"")).toBe("📍 New York, USA 📷 iPhone 16 Pro");
+    expect(postListLabel({ excerpt: "A small note." })).toBe("A small note.");
+    expect(postListLabel({ title: "Named", excerpt: "Body" })).toBe("Named");
+    expect(postListLabel({})).toBe("Untitled");
+  });
+
+  it("treats posts without status as published for backwards compatibility", () => {
+    expect(summarizePost("content/posts/post.md", "---\ndate: 2026-05-11T10:00:00.000Z\n---\n\nBody").status).toBe("published");
+    expect(summarizePost("content/posts/post.md", "---\nstatus: draft\n---\n\nBody").status).toBe("draft");
+  });
+
+  it("formats Writer post statuses for display", () => {
+    expect(postStatusLabel("draft")).toBe("Draft");
+    expect(postStatusLabel("published")).toBe("Published");
+  });
+
+  it("formats Writer post dates with browser locale settings", () => {
+    expect(formatPostDate("2026-05-11T10:00:00.000Z", "en-US")).toBe("May 11, 2026");
+    expect(formatPostDate("not-a-date", "en-US")).toBe("not-a-date");
+    expect(formatPostDate(undefined, "en-US")).toBeUndefined();
+  });
+
+  it("sets the post date and removes status when publishing", () => {
+    const markdown = buildPostMarkdown({
+      title: "Publish Me",
+      slug: "publish-me",
+      status: "published",
+      body: "Body",
+      existingMarkdown: "---\ntitle: Publish Me\nslug: publish-me\nstatus: draft\ndate: 2026-05-01T10:00:00.000Z\n---\n\nBody",
+      updateDate: true,
+      now: new Date("2026-05-11T10:00:00.000Z")
+    });
+    expect(markdown).toContain("date: 2026-05-11T10:00:00.000Z");
+    expect(markdown).not.toContain("status:");
+    expect(markdown).not.toContain("slug:");
+  });
+
+  it("writes draft status when saving a draft", () => {
+    const markdown = buildPostMarkdown({
+      title: "Draft Me",
+      slug: "draft-me",
+      status: "draft",
+      body: "Body",
+      existingMarkdown: "---\ntitle: Draft Me\nslug: draft-me\ndate: 2026-05-01T10:00:00.000Z\n---\n\nBody",
+      now: new Date("2026-05-11T10:00:00.000Z")
+    });
+    expect(markdown).toContain("status: draft");
+    expect(markdown).toContain("date: 2026-05-01T10:00:00.000Z");
+    expect(markdown).not.toContain("slug:");
+  });
+
+  it("preserves the post date when saving an already published post", () => {
+    const markdown = buildPostMarkdown({
+      title: "Published",
+      slug: "published",
+      status: "published",
+      body: "Edited body",
+      existingMarkdown: "---\ntitle: Published\nslug: published\ndate: 2026-05-01T10:00:00.000Z\n---\n\nBody",
+      now: new Date("2026-05-11T10:00:00.000Z")
+    });
+    expect(markdown).toContain("date: 2026-05-01T10:00:00.000Z");
+    expect(markdown).toContain("updated_at: 2026-05-11T10:00:00.000Z");
+    expect(markdown).not.toContain("status:");
+  });
+
+  it("sorts Writer posts by post date before edit timestamps", () => {
+    const posts = [
+      { title: "Recently edited older post", date: "2026-05-09T10:00:00.000Z", updatedAt: "2026-05-12T10:00:00.000Z" },
+      { title: "Newest dated post", date: "2026-05-11T10:00:00.000Z" },
+      { title: "Middle dated post", date: "2026-05-10T10:00:00.000Z" }
+    ].sort((a, b) => postDateSortValue(b).localeCompare(postDateSortValue(a)));
+    expect(posts.map((post) => post.title)).toEqual(["Newest dated post", "Middle dated post", "Recently edited older post"]);
+  });
+
+  it("extracts Markdown and HTML image references", () => {
+    expect(extractMarkdownImageReferences("![](a.jpg)\n<img src=\"/images/b.png\">")).toEqual(["a.jpg", "/images/b.png"]);
+  });
+
+  it("keeps Writer media flat and chooses unique filenames", () => {
+    expect(mediaAssetPath("content/media", "keep.jpg")).toBe("content/media/keep.jpg");
+    expect(markdownMediaReference("content/media", "keep.jpg")).toBe("/media/keep.jpg");
+    expect(mediaAssetPath("content/photos", "IMG_2841.jpeg")).toBe("content/photos/IMG_2841.jpeg");
+    expect(markdownMediaReference("content/photos", "IMG_2841.jpeg")).toBe("/photos/IMG_2841.jpeg");
+    expect(uniqueAssetFilename("My Photo.JPG", [])).toBe("my-photo.jpg");
+    expect(uniqueAssetFilename("My Photo.JPG", ["my-photo.jpg", "my-photo-2.jpg"])).toBe("my-photo-3.jpg");
+    expect(referencedMediaPaths("![](/media/keep.jpg)\n<img src=\"/media/other.jpg\">", "content/media")).toEqual(["content/media/keep.jpg", "content/media/other.jpg"]);
+    expect(referencedMediaPaths("![](/photos/IMG_2841.jpeg)", "content/photos")).toEqual(["content/photos/IMG_2841.jpeg"]);
+  });
+
+  it("generates public Writer config without secrets", () => {
+    expect(publicWriterConfig({
+      site: { title: "My Website", url: "https://example.com", author: "Your Name" },
+      content: { posts: "content/posts", pages: "content/pages", media: "content/media" },
+      writer: {
+        enabled: true,
+        path: "/writer",
+        provider: "github",
+        owner: "me",
+        repo: "site",
+        branch: "main"
+      }
+    })).toEqual({
+      provider: "github",
+      owner: "me",
+      repo: "site",
+      branch: "main",
+      postsPath: "content/posts",
+      mediaPath: "content/media"
+    });
+  });
+
+  it("defaults the Writer path to /writer when omitted", () => {
+    expect(resolveWriterConfig({
+      site: { title: "My Website", url: "https://example.com", author: "Your Name" },
+      content: { posts: "content/posts", pages: "content/pages", media: "content/media" },
+      writer: {
+        enabled: true,
+        provider: "github",
+        owner: "me",
+        repo: "site",
+        branch: "main"
+      }
+    })?.path).toBe("/writer");
+  });
+
+  it("supports GitLab Writer config and validates through the GitLab API", async () => {
+    const requests: Array<{ url: string; token: string | null }> = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      requests.push({ url, token: new Headers(init?.headers).get("PRIVATE-TOKEN") });
+      if (url.includes("/repository/tree?")) return new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+      return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+    };
+
+    try {
+      const adapter = new GitLabRepositoryAdapter({
+        provider: "gitlab",
+        owner: "group/subgroup",
+        repo: "site",
+        branch: "main",
+        postsPath: "content/posts",
+        mediaPath: "content/media"
+      }, "pat");
+      await adapter.validateConnection();
+      expect(requests[0].url).toContain("https://gitlab.com/api/v4/projects/group%2Fsubgroup%2Fsite/repository/tree?");
+      expect(requests[0].url).toContain("path=content%2Fposts");
+      expect(requests[0].url).toContain("ref=main");
+      expect(requests[0].token).toBe("pat");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("loads GitHub Writer posts concurrently", async () => {
+    let activeFileReads = 0;
+    let maxActiveFileReads = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("/git/trees/main?")) {
+        return new Response(JSON.stringify({
+          tree: [
+            { type: "blob", path: "content/posts/older.md", sha: "older" },
+            { type: "blob", path: "content/posts/newer.md", sha: "newer" }
+          ]
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      activeFileReads += 1;
+      maxActiveFileReads = Math.max(maxActiveFileReads, activeFileReads);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      activeFileReads -= 1;
+      const newer = url.includes("/git/blobs/newer");
+      return new Response(JSON.stringify({
+        content: Buffer.from(`---\ntitle: ${newer ? "Newer" : "Older"}\ndate: ${newer ? "2026-05-12" : "2026-05-11"}\n---\n\nBody`).toString("base64")
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    };
+
+    try {
+      const adapter = new GitHubRepositoryAdapter({
+        provider: "github",
+        owner: "me",
+        repo: "site",
+        branch: "main",
+        postsPath: "content/posts",
+        mediaPath: "content/media"
+      }, "pat");
+      const posts = await adapter.listPosts();
+      expect(posts.map((post) => post.title)).toEqual(["Newer", "Older"]);
+      expect(maxActiveFileReads).toBeGreaterThan(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("deletes GitHub Writer posts and media in a single commit", async () => {
+    const requests: Array<{ url: string; method: string; body?: unknown }> = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init = {}) => {
+      const url = String(input);
+      const method = init.method ?? "GET";
+      requests.push({ url, method, body: init.body ? JSON.parse(String(init.body)) : undefined });
+      if (url.includes("/contents/content/posts/post.md")) return new Response(JSON.stringify({ type: "file", path: "content/posts/post.md", sha: "post-sha" }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.includes("/contents/content/media/photo.jpg")) return new Response(JSON.stringify({ type: "file", path: "content/media/photo.jpg", sha: "photo-sha" }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.includes("/git/ref/heads/main")) return new Response(JSON.stringify({ object: { sha: "parent-sha" } }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.includes("/git/commits/parent-sha")) return new Response(JSON.stringify({ sha: "parent-sha", tree: { sha: "tree-sha" } }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.endsWith("/git/trees")) return new Response(JSON.stringify({ sha: "new-tree-sha" }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.endsWith("/git/commits")) return new Response(JSON.stringify({ sha: "new-commit-sha", html_url: "https://github.test/commit" }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.includes("/git/refs/heads/main")) return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+      return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+    };
+
+    try {
+      const adapter = new GitHubRepositoryAdapter({
+        provider: "github",
+        owner: "me",
+        repo: "site",
+        branch: "main",
+        postsPath: "content/posts",
+        mediaPath: "content/media"
+      }, "pat");
+      const result = await adapter.deletePost({ path: "content/posts/post.md", slug: "post", sha: "post-sha", mediaPaths: ["content/media/photo.jpg"] });
+      expect(result.sha).toBe("new-commit-sha");
+      const treeRequest = requests.find((request) => request.url.endsWith("/git/trees"));
+      expect(treeRequest?.body).toMatchObject({
+        base_tree: "tree-sha",
+        tree: [
+          { path: "content/posts/post.md", sha: null },
+          { path: "content/media/photo.jpg", sha: null }
+        ]
+      });
+      expect(requests.filter((request) => request.method === "DELETE")).toHaveLength(0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("saves GitHub Writer posts and media in a single commit", async () => {
+    const requests: Array<{ url: string; method: string; body?: unknown }> = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init = {}) => {
+      const url = String(input);
+      const method = init.method ?? "GET";
+      requests.push({ url, method, body: init.body ? JSON.parse(String(init.body)) : undefined });
+      if (url.includes("/contents/content/posts/post.md")) return new Response(JSON.stringify({ type: "file", path: "content/posts/post.md", sha: "post-sha" }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.includes("/contents/content/media/photo.jpg")) return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+      if (url.includes("/git/ref/heads/main")) return new Response(JSON.stringify({ object: { sha: "parent-sha" } }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.includes("/git/commits/parent-sha")) return new Response(JSON.stringify({ sha: "parent-sha", tree: { sha: "tree-sha" } }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.endsWith("/git/blobs")) return new Response(JSON.stringify({ sha: `blob-${requests.filter((request) => request.url.endsWith("/git/blobs")).length}` }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.endsWith("/git/trees")) return new Response(JSON.stringify({ sha: "new-tree-sha" }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.endsWith("/git/commits")) return new Response(JSON.stringify({ sha: "new-commit-sha", html_url: "https://github.test/commit" }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.includes("/git/refs/heads/main")) return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+      return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+    };
+
+    try {
+      const adapter = new GitHubRepositoryAdapter({
+        provider: "github",
+        owner: "me",
+        repo: "site",
+        branch: "main",
+        postsPath: "content/posts",
+        mediaPath: "content/media"
+      }, "pat");
+      const result = await adapter.savePost({
+        path: "content/posts/post.md",
+        slug: "post",
+        status: "published",
+        content: "---\ndate: 2026-05-11\n---\n\n![](/media/photo.jpg)",
+        sha: "post-sha",
+        media: [{ path: "content/media/photo.jpg", contentBase64: Buffer.from("image").toString("base64"), message: "Upload media" }]
+      });
+      expect(result.sha).toBe("new-commit-sha");
+      const treeRequest = requests.find((request) => request.url.endsWith("/git/trees"));
+      expect(treeRequest?.body).toMatchObject({
+        base_tree: "tree-sha",
+        tree: [
+          { path: "content/posts/post.md" },
+          { path: "content/media/photo.jpg" }
+        ]
+      });
+      expect(requests.filter((request) => request.url.includes("/contents/") && request.method === "PUT")).toHaveLength(0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("retries GitHub Writer media saves when the branch moved", async () => {
+    let refUpdates = 0;
+    let refReads = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init = {}) => {
+      const url = String(input);
+      const method = init.method ?? "GET";
+      if (url.includes("/contents/content/posts/post.md")) return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+      if (url.includes("/contents/content/media/photo.jpg")) return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+      if (url.includes("/git/ref/heads/main") && method === "GET") {
+        refReads += 1;
+        return new Response(JSON.stringify({ object: { sha: refReads === 1 ? "old-parent" : "new-parent" } }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url.includes("/git/commits/old-parent")) return new Response(JSON.stringify({ sha: "old-parent", tree: { sha: "old-tree" } }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.includes("/git/commits/new-parent")) return new Response(JSON.stringify({ sha: "new-parent", tree: { sha: "new-tree" } }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.endsWith("/git/blobs")) return new Response(JSON.stringify({ sha: "blob-sha" }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.endsWith("/git/trees")) return new Response(JSON.stringify({ sha: "tree-sha" }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.endsWith("/git/commits")) return new Response(JSON.stringify({ sha: `commit-${refReads}` }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.includes("/git/refs/heads/main") && method === "PATCH") {
+        refUpdates += 1;
+        if (refUpdates === 1) return new Response(JSON.stringify({ message: "Update is not a fast forward" }), { status: 422, headers: { "content-type": "application/json" } });
+        return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+    };
+
+    try {
+      const adapter = new GitHubRepositoryAdapter({
+        provider: "github",
+        owner: "me",
+        repo: "site",
+        branch: "main",
+        postsPath: "content/posts",
+        mediaPath: "content/media"
+      }, "pat");
+      const result = await adapter.savePost({
+        path: "content/posts/post.md",
+        slug: "post",
+        status: "draft",
+        content: "Body\n\n![](/media/photo.jpg)",
+        media: [{ path: "content/media/photo.jpg", contentBase64: Buffer.from("image").toString("base64"), message: "Upload media" }]
+      });
+      expect(result.sha).toBe("commit-2");
+      expect(refUpdates).toBe(2);
+      expect(refReads).toBe(2);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("reuses the latest GitHub branch head after a successful batch commit", async () => {
+    let refReads = 0;
+    const commits: string[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init = {}) => {
+      const url = String(input);
+      const method = init.method ?? "GET";
+      if (url.includes("/contents/content/posts/")) return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+      if (url.includes("/contents/content/media/")) return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+      if (url.includes("/git/ref/heads/main") && method === "GET") {
+        refReads += 1;
+        return new Response(JSON.stringify({ object: { sha: "initial-parent" } }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url.includes("/git/commits/initial-parent")) return new Response(JSON.stringify({ sha: "initial-parent", tree: { sha: "initial-tree" } }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.includes("/git/commits/commit-1")) return new Response(JSON.stringify({ sha: "commit-1", tree: { sha: "tree-1" } }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.endsWith("/git/blobs")) return new Response(JSON.stringify({ sha: "blob-sha" }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.endsWith("/git/trees")) return new Response(JSON.stringify({ sha: "new-tree-sha" }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.endsWith("/git/commits")) {
+        const sha = `commit-${commits.length + 1}`;
+        commits.push(sha);
+        return new Response(JSON.stringify({ sha }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url.includes("/git/refs/heads/main") && method === "PATCH") return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+      return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+    };
+
+    try {
+      const adapter = new GitHubRepositoryAdapter({
+        provider: "github",
+        owner: "me",
+        repo: "site",
+        branch: "main",
+        postsPath: "content/posts",
+        mediaPath: "content/media"
+      }, "pat");
+      await adapter.savePost({
+        path: "content/posts/one.md",
+        slug: "one",
+        status: "draft",
+        content: "One",
+        media: [{ path: "content/media/one.jpg", contentBase64: Buffer.from("one").toString("base64"), message: "Upload media" }]
+      });
+      await adapter.savePost({
+        path: "content/posts/two.md",
+        slug: "two",
+        status: "draft",
+        content: "Two",
+        media: [{ path: "content/media/two.jpg", contentBase64: Buffer.from("two").toString("base64"), message: "Upload media" }]
+      });
+      expect(refReads).toBe(1);
+      expect(commits).toEqual(["commit-1", "commit-2"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("deletes GitLab Writer posts and media in a single commit", async () => {
+    const requests: Array<{ url: string; method: string; body?: unknown }> = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init = {}) => {
+      const url = String(input);
+      const method = init.method ?? "GET";
+      requests.push({ url, method, body: init.body ? JSON.parse(String(init.body)) : undefined });
+      if (url.includes("/repository/files/")) return new Response(JSON.stringify({ file_path: "file", file_name: "file", blob_id: "sha", content: "" }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.endsWith("/repository/commits")) return new Response(JSON.stringify({ id: "new-commit-sha", web_url: "https://gitlab.test/commit" }), { status: 200, headers: { "content-type": "application/json" } });
+      return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+    };
+
+    try {
+      const adapter = new GitLabRepositoryAdapter({
+        provider: "gitlab",
+        owner: "me",
+        repo: "site",
+        branch: "main",
+        postsPath: "content/posts",
+        mediaPath: "content/media"
+      }, "pat");
+      const result = await adapter.deletePost({ path: "content/posts/post.md", slug: "post", mediaPaths: ["content/media/photo.jpg"] });
+      expect(result.sha).toBe("new-commit-sha");
+      const commitRequest = requests.find((request) => request.url.endsWith("/repository/commits"));
+      expect(commitRequest?.body).toMatchObject({
+        branch: "main",
+        commit_message: "Delete post: post",
+        actions: [
+          { action: "delete", file_path: "content/posts/post.md" },
+          { action: "delete", file_path: "content/media/photo.jpg" }
+        ]
+      });
+      expect(requests.filter((request) => request.method === "DELETE")).toHaveLength(0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("saves GitLab Writer posts and media in a single commit", async () => {
+    const requests: Array<{ url: string; method: string; body?: unknown }> = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init = {}) => {
+      const url = String(input);
+      const method = init.method ?? "GET";
+      requests.push({ url, method, body: init.body ? JSON.parse(String(init.body)) : undefined });
+      if (url.includes("/repository/files/content%2Fposts%2Fpost.md")) return new Response(JSON.stringify({ file_path: "content/posts/post.md", file_name: "post.md", blob_id: "sha", content: "" }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.includes("/repository/files/content%2Fmedia%2Fphoto.jpg")) return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+      if (url.endsWith("/repository/commits")) return new Response(JSON.stringify({ id: "new-commit-sha", web_url: "https://gitlab.test/commit" }), { status: 200, headers: { "content-type": "application/json" } });
+      return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+    };
+
+    try {
+      const adapter = new GitLabRepositoryAdapter({
+        provider: "gitlab",
+        owner: "me",
+        repo: "site",
+        branch: "main",
+        postsPath: "content/posts",
+        mediaPath: "content/media"
+      }, "pat");
+      const result = await adapter.savePost({
+        path: "content/posts/post.md",
+        slug: "post",
+        status: "published",
+        sha: "sha",
+        content: "---\ndate: 2026-05-11\n---\n\n![](/media/photo.jpg)",
+        media: [{ path: "content/media/photo.jpg", contentBase64: Buffer.from("image").toString("base64"), message: "Upload media" }]
+      });
+      expect(result.sha).toBe("new-commit-sha");
+      const commitRequest = requests.find((request) => request.url.endsWith("/repository/commits"));
+      expect(commitRequest?.body).toMatchObject({
+        branch: "main",
+        commit_message: "Publish post: post",
+        actions: [
+          { action: "update", file_path: "content/posts/post.md" },
+          { action: "create", file_path: "content/media/photo.jpg" }
+        ]
+      });
+      expect(requests.filter((request) => request.url.includes("/repository/files/") && ["POST", "PUT"].includes(request.method))).toHaveLength(0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("overrides Writer to the local provider in the dev server", async () => {
+    const site = await makeSite();
+    const config = await loadConfig(site);
+    config.writer = {
+      enabled: true,
+      provider: "github",
+      owner: "example",
+      repo: "site",
+      branch: "main"
+    };
+
+    expect(localWriterConfig(config).writer?.provider).toBe("local");
+  });
+
+  it("serves local Writer API requests from the working copy", async () => {
+    const site = await makeSite();
+    const config = localWriterConfig({
+      ...await loadConfig(site),
+      writer: {
+        enabled: true,
+        provider: "gitlab",
+        owner: "example",
+        repo: "site",
+        branch: "main"
+      }
+    });
+    const content = "---\ntitle: Local\nslug: local\ndate: 2026-05-11T10:00:00.000Z\nstatus: draft\nupdated_at: 2026-05-11T10:00:00.000Z\n---\n\nBody\n\n![](/media/photo.jpg)";
+    const save = await localApi("PUT", "/__inkstead-writer/api/post", { path: "content/posts/local.md", content }, site, config);
+    expect(save.status).toBe(200);
+    expect(await fs.readFile(path.join(site, "content/posts/local.md"), "utf8")).toBe(content);
+    const duplicatePost = await localApi("PUT", "/__inkstead-writer/api/post", { path: "content/posts/local.md", content: content.replace("Body", "Replacement") }, site, config);
+    expect(duplicatePost.status).toBe(400);
+    expect(await fs.readFile(path.join(site, "content/posts/local.md"), "utf8")).toBe(content);
+
+    const posts = await localApi("GET", "/__inkstead-writer/api/posts", undefined, site, config);
+    expect((posts.body as Array<{ slug: string }>).map((post) => post.slug)).toContain("local");
+    expect((posts.body as Array<{ slug: string; date?: string }>).find((post) => post.slug === "local")?.date).toBe("2026-05-11T10:00:00.000Z");
+
+    const upload = await localApi("PUT", "/__inkstead-writer/api/asset", {
+      path: "content/media/photo.jpg",
+      contentBase64: Buffer.from("fake image").toString("base64")
+    }, site, config);
+    expect(upload.status).toBe(200);
+    const duplicate = await localApi("PUT", "/__inkstead-writer/api/asset", {
+      path: "content/media/photo.jpg",
+      contentBase64: Buffer.from("replacement").toString("base64")
+    }, site, config);
+    expect(duplicate.status).toBe(400);
+    const media = await localApi("GET", "/__inkstead-writer/api/assets?folder=content%2Fmedia", undefined, site, config);
+    expect((media.body as Array<{ name: string }>).map((asset) => asset.name)).toContain("photo.jpg");
+
+    const deleted = await localApi("DELETE", "/__inkstead-writer/api/post", { path: "content/posts/local.md", mediaPaths: ["content/media/photo.jpg"] }, site, config);
+    expect(deleted.status).toBe(200);
+    await expect(fs.stat(path.join(site, "content/media/photo.jpg"))).rejects.toThrow();
+
+    const escape = await localApi("PUT", "/__inkstead-writer/api/post", { path: "content/pages/nope.md", content }, site, config);
+    expect(escape.status).toBe(400);
+  });
+
+  it("resolves extensionless dev server paths to directory index files", () => {
+    expect(staticFilePath("/")).toBe("index.html");
+    expect(staticFilePath("/writer")).toBe("writer/index.html");
+    expect(staticFilePath("/writer/")).toBe("writer/index.html");
+    expect(staticFilePath("/assets/app.js")).toBe("assets/app.js");
+  });
+
+  it("serves JavaScript with a module-compatible MIME type", () => {
+    expect(contentType("assets/app.js")).toBe("text/javascript; charset=utf-8");
+    expect(contentType("assets/app.mjs")).toBe("text/javascript; charset=utf-8");
+  });
+
+  it("does not show an Untitled fallback in Writer previews", () => {
+    expect(previewTitle(undefined)).toBeUndefined();
+    expect(previewTitle("   ")).toBeUndefined();
+    expect(previewTitle("Named")).toBe("Named");
+  });
+
+  it("ships Writer PWA metadata and Inkstead app icons", async () => {
+    const index = await fs.readFile(path.join(process.cwd(), "src/writer/app/index.html"), "utf8");
+    expect(index).toContain("location.replace");
+    const manifest = JSON.parse(await fs.readFile(path.join(process.cwd(), "src/writer/app/public/manifest.webmanifest"), "utf8"));
+    expect(manifest.name).toBe("Inkstead Writer");
+    expect(manifest.display).toBe("fullscreen");
+    expect(manifest.start_url).toBe("./");
+    expect(manifest.scope).toBe("./");
+    expect(manifest.icons.map((icon: { src: string }) => icon.src)).toEqual(["./icons/inkstead-192.png", "./icons/inkstead-512.png"]);
+    await expect(fs.stat(path.join(process.cwd(), "src/writer/app/public/icons/inkstead-192.png"))).resolves.toBeTruthy();
+    await expect(fs.stat(path.join(process.cwd(), "src/writer/app/public/icons/inkstead-512.png"))).resolves.toBeTruthy();
+    await expect(fs.stat(path.join(process.cwd(), "src/writer/app/public/icons/apple-touch-icon.png"))).resolves.toBeTruthy();
+  });
+});
+
+async function localApi(method: string, url: string, body: unknown, root: string, config: Parameters<typeof handleWriterLocalApi>[3]): Promise<{ status: number; body: unknown }> {
+  const request = Readable.from(body === undefined ? [] : [JSON.stringify(body)]) as unknown as Parameters<typeof handleWriterLocalApi>[0];
+  request.method = method;
+  request.url = url;
+  let status = 0;
+  let responseBody = "";
+  const response = {
+    writeHead(nextStatus: number) {
+      status = nextStatus;
+    },
+    end(chunk: string) {
+      responseBody = chunk;
+    }
+  } as unknown as Parameters<typeof handleWriterLocalApi>[1];
+  await handleWriterLocalApi(request, response, root, config);
+  return { status, body: JSON.parse(responseBody) };
+}
 
 describe("requirements and doctor", () => {
   it("generates a starter Wrangler config for Cloudflare Workers", async () => {
@@ -479,7 +1217,7 @@ describe("requirements and doctor", () => {
     await fs.writeFile(path.join(site, "site.config.ts"), `import { defineConfig } from "inkstead";
 export default defineConfig({
   site: { title: "My Website", url: "https://example.com", author: "Your Name" },
-  content: { posts: "content/posts", pages: "content/pages", photos: "content/photos" },
+  content: { posts: "content/posts", pages: "content/pages", media: "content/media" },
   ci: { provider: "github-actions" },
   deploy: { provider: "cloudflare-workers", projectName: "my-website" },
   syndication: { providers: ["mastodon"] }
@@ -498,7 +1236,7 @@ export default defineConfig({
     await fs.writeFile(path.join(site, "site.config.ts"), `import { defineConfig } from "inkstead";
 export default defineConfig({
   site: { title: "My Website", url: "https://example.com", author: "Your Name" },
-  content: { posts: "content/posts", pages: "content/pages", photos: "content/photos" },
+  content: { posts: "content/posts", pages: "content/pages", media: "content/media" },
   ci: { provider: "github-actions" },
   deploy: { provider: "github-pages" }
 });`);
@@ -512,7 +1250,7 @@ export default defineConfig({
     await fs.writeFile(path.join(site, "site.config.ts"), `import { defineConfig } from "inkstead";
 export default defineConfig({
   site: { title: "My Website", url: "https://example.com", author: "Your Name" },
-  content: { posts: "content/posts", pages: "content/pages", photos: "content/photos" },
+  content: { posts: "content/posts", pages: "content/pages", media: "content/media" },
   ci: { provider: "gitlab-ci" },
   deploy: { provider: "github-pages" }
 });`);
@@ -521,7 +1259,7 @@ export default defineConfig({
     await fs.writeFile(path.join(site, "site.config.ts"), `import { defineConfig } from "inkstead";
 export default defineConfig({
   site: { title: "My Website", url: "https://example.com", author: "Your Name" },
-  content: { posts: "content/posts", pages: "content/pages", photos: "content/photos" },
+  content: { posts: "content/posts", pages: "content/pages", media: "content/media" },
   ci: { provider: "github-actions" },
   deploy: { provider: "gitlab-pages" }
 });`);

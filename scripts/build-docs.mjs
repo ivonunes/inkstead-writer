@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import MarkdownIt from "markdown-it";
 
@@ -43,8 +43,9 @@ const navGroups = [
     ]
   },
   {
-    title: "Extra",
+    title: "Extras",
     pages: [
+      { slug: "writer", file: "writer.md" },
       { slug: "troubleshooting", file: "troubleshooting.md" },
       { slug: "upgrading", file: "upgrading.md" }
     ]
@@ -227,6 +228,12 @@ function pageLayout({ title, content, pages, groups, currentSlug }) {
       padding-left: 18px;
       border-left: 5px solid var(--gold);
       color: var(--muted);
+    }
+    main img {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      margin: 34px 0;
     }
     @media (max-width: 860px) {
       .shell { display: block; }
@@ -572,7 +579,10 @@ async function main() {
   await rm(outDir, { recursive: true, force: true });
   await mkdir(outDir, { recursive: true });
   await mkdir(path.join(outDir, "assets"), { recursive: true });
-  await copyFile(path.join(docsDir, "assets/inkstead.png"), path.join(outDir, "assets/inkstead.png"));
+  for (const item of await readdir(path.join(docsDir, "assets"), { withFileTypes: true })) {
+    if (!item.isFile()) continue;
+    await copyFile(path.join(docsDir, "assets", item.name), path.join(outDir, "assets", item.name));
+  }
   await copyFile(path.join(docsDir, "assets/inkstead.png"), path.join(outDir, "favicon.png"));
 
   await writeFile(path.join(outDir, "index.html"), landingLayout());

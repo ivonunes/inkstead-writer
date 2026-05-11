@@ -35,8 +35,10 @@ const configSchema = z.object({
   content: z.object({
     posts: z.string().default("content/posts"),
     pages: z.string().default("content/pages"),
-    photos: z.string().default("content/photos")
-  }),
+    media: z.string().default("content/media")
+  }).transform((content) => ({
+    ...content
+  })),
   build: z.object({ output: z.string().optional() }).optional(),
   hooks: z.object({
     beforeBuild: z.array(z.string()).optional(),
@@ -59,6 +61,14 @@ const configSchema = z.object({
   }).optional(),
   pagination: z.object({ postsPerPage: z.number().int().positive().optional() }).optional(),
   feeds: z.object({ limit: z.number().int().positive().optional() }).optional(),
+  writer: z.object({
+    enabled: z.boolean().optional(),
+    path: z.string().min(1).optional(),
+    provider: z.enum(["github", "gitlab", "local"]),
+    owner: z.string().min(1).optional(),
+    repo: z.string().min(1).optional(),
+    branch: z.string().min(1).optional()
+  }).strict().optional(),
   ci: z.object({ provider: z.enum(["github-actions", "gitlab-ci"]) }).optional(),
   deploy: z.discriminatedUnion("provider", [
     z.object({ provider: z.literal("cloudflare-workers"), projectName: z.string().min(1) }),

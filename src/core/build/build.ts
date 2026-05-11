@@ -7,6 +7,7 @@ import { createTemplateRenderer, type TemplateRenderer } from "../templates/rend
 import { ensureDir, writeFileEnsured } from "../../utils/fs.js";
 import { runHookCommands } from "./hooks.js";
 import { optimizeBuiltImages } from "./images.js";
+import { copyWriterApp } from "../writer/build.js";
 
 export async function buildSite(root: string, config: InksteadConfig): Promise<void> {
   await runHookCommands(config.hooks?.beforeBuild, root);
@@ -59,12 +60,13 @@ export async function buildSite(root: string, config: InksteadConfig): Promise<v
   await writeFileEnsured(path.join(dist, "feed.json"), jsonFeed(config, posts));
   await writeFileEnsured(path.join(dist, "sitemap.xml"), sitemap(config, [config.site.url, ...posts.map((post) => post.canonicalUrl), ...pages.map((page) => page.canonicalUrl), ...categories.map((category) => `${config.site.url.replace(/\/$/, "")}${category.urlPath}`)]));
 
-  const photosDir = path.join(root, config.content.photos);
-  await fs.cp(photosDir, path.join(dist, "photos"), { recursive: true, force: true }).catch(() => undefined);
-  await optimizeBuiltImages(path.join(dist, "photos"), config);
+  const mediaDir = path.join(root, config.content.media);
+  await fs.cp(mediaDir, path.join(dist, "media"), { recursive: true, force: true }).catch(() => undefined);
+  await optimizeBuiltImages(path.join(dist, "media"), config);
   for (const asset of config.assets?.passthrough ?? []) {
     await fs.cp(path.join(root, asset.from), path.join(dist, asset.to ?? "."), { recursive: true, force: true }).catch(() => undefined);
   }
+  await copyWriterApp(dist, config);
   await runHookCommands(config.hooks?.afterBuild, root);
 }
 

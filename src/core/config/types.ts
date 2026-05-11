@@ -1,6 +1,21 @@
 export type CiProviderName = "github-actions" | "gitlab-ci";
 export type DeployProviderName = "cloudflare-workers" | "github-pages" | "gitlab-pages";
 export type SyndicationProviderName = "mastodon" | "bluesky" | "flickr";
+export type WriterProviderName = "github" | "gitlab" | "local";
+
+export interface WriterConfig {
+  enabled?: boolean;
+  path?: string;
+  provider: WriterProviderName;
+  owner?: string;
+  repo?: string;
+  branch?: string;
+}
+
+export type PublicWriterConfig = Omit<WriterConfig, "enabled" | "path"> & {
+  postsPath: string;
+  mediaPath: string;
+};
 
 export interface InksteadConfig {
   site: {
@@ -19,7 +34,7 @@ export interface InksteadConfig {
   content: {
     posts: string;
     pages: string;
-    photos: string;
+    media: string;
   };
   build?: {
     output?: string;
@@ -54,6 +69,7 @@ export interface InksteadConfig {
   feeds?: {
     limit?: number;
   };
+  writer?: WriterConfig;
   ci?: {
     provider: CiProviderName;
   };

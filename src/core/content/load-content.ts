@@ -115,11 +115,11 @@ function isRemoteImage(ref: string): boolean {
 
 function sourcePhotoPath(ref: string, parsed: ParsedMarkdown, config: InksteadConfig, root: string): string | undefined {
   if (isRemoteImage(ref)) return undefined;
-  if (ref.startsWith("/photos/")) return path.join(root, config.content.photos, ref.replace(/^\/photos\//, ""));
+  if (ref.startsWith("/media/")) return path.join(root, config.content.media, ref.replace(/^\/media\//, ""));
   if (ref.startsWith("/")) return path.join(root, ref.replace(/^\//, ""));
-  if (ref.startsWith(`${config.content.photos}/`)) return path.join(root, ref);
+  if (ref.startsWith(`${config.content.media}/`)) return path.join(root, ref);
 
-  const contentPhotoPath = path.join(root, config.content.photos, ref);
+  const contentPhotoPath = path.join(root, config.content.media, ref);
   if (existsSync(contentPhotoPath)) return contentPhotoPath;
 
   return path.resolve(path.dirname(parsed.path), ref);
@@ -290,6 +290,10 @@ export function normalizePost(parsed: ParsedMarkdown, config: InksteadConfig, ro
   };
 }
 
+export function isDraftPost(parsed: ParsedMarkdown): boolean {
+  return typeof parsed.frontmatter.status === "string" && parsed.frontmatter.status.toLowerCase() === "draft";
+}
+
 export function groupPostsByCategory(posts: NormalizedPost[]): CategoryCollection[] {
   const categoryMap = new Map<string, CategoryCollection>();
   for (const post of posts) {
@@ -329,7 +333,10 @@ export function normalizePage(parsed: ParsedMarkdown, config: InksteadConfig): N
 
 export async function loadPosts(root: string, config: InksteadConfig): Promise<NormalizedPost[]> {
   const files = await listMarkdownFiles(path.join(root, config.content.posts));
-  const posts = (await Promise.all(files.map(async (file) => normalizePost(await parseMarkdownFile(file, config), config, root))))
+  const parsed = await Promise.all(files.map((file) => parseMarkdownFile(file, config)));
+  const posts = parsed
+    .filter((post) => !isDraftPost(post))
+    .map((post) => normalizePost(post, config, root))
     .sort((a, b) => b.date.valueOf() - a.date.valueOf());
   posts.forEach((post, index) => {
     post.next = index > 0 ? posts[index - 1] : undefined;

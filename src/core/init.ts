@@ -1,7 +1,7 @@
 import path from "node:path";
 import { existsSync } from "node:fs";
 import { ciProviders, requirementsForConfig, uniqueEnvironmentVariables } from "./adapters/registry.js";
-import type { CiProviderName, DeployProviderName, InksteadConfig, SyndicationProviderName } from "./config/types.js";
+import type { CiProviderName, DeployProviderName, InksteadConfig, SyndicationProviderName, WriterProviderName } from "./config/types.js";
 import { writeFileEnsured } from "../utils/fs.js";
 
 export interface InitSiteOptions {
@@ -9,12 +9,19 @@ export interface InitSiteOptions {
   deploy?: DeployProviderName | "none";
   deployProjectName?: string;
   syndication?: SyndicationProviderName[];
+  writer?: {
+    enabled: boolean;
+    provider?: Exclude<WriterProviderName, "local">;
+    owner?: string;
+    repo?: string;
+    branch?: string;
+  };
 }
 
 function siteConfig(projectName: string, options: InitSiteOptions = {}): InksteadConfig {
   const config: InksteadConfig = {
     site: { title: "My Website", url: "https://example.com", author: "Your Name", description: "Notes, photos, and longer writing." },
-    content: { posts: "content/posts", pages: "content/pages", photos: "content/photos" }
+    content: { posts: "content/posts", pages: "content/pages", media: "content/media" }
   };
   if (options.ci !== "none") config.ci = { provider: options.ci ?? "github-actions" };
   if (options.deploy === "github-pages") config.ci = { provider: "github-actions" };
@@ -25,6 +32,15 @@ function siteConfig(projectName: string, options: InitSiteOptions = {}): Inkstea
     config.deploy = { provider: "cloudflare-workers", projectName: options.deployProjectName ?? projectName };
   }
   if (options.syndication && options.syndication.length > 0) config.syndication = { providers: options.syndication };
+  if (options.writer?.enabled && options.writer.provider && options.writer.owner && options.writer.repo && options.writer.branch) {
+    config.writer = {
+      enabled: true,
+      provider: options.writer.provider,
+      owner: options.writer.owner,
+      repo: options.writer.repo,
+      branch: options.writer.branch
+    };
+  }
   return config;
 }
 
@@ -74,7 +90,7 @@ export default defineConfig(${JSON.stringify(config, null, 2)});
     "content/posts/first-article.md": `${postFrontmatter({ title: "\"Why I Still Want a Personal Website\"", date: "2026-05-10T18:30:00+01:00" }, syndication)}\n\nLonger article content here.\n`,
     "content/pages/about.md": "---\ntitle: About\n---\n\nThis is my website.\n",
     "content/pages/now.md": "---\ntitle: Now\n---\n\nWhat I am focused on now.\n",
-    "content/photos/.gitkeep": ""
+    "content/media/.gitkeep": ""
   };
   if (workflow) files[workflow.path] = workflow.content;
 
