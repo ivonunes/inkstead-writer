@@ -232,8 +232,11 @@ export default defineConfig({
     expect(html).toContain('rel="me"');
     expect(page2).toContain("h-entry");
     expect(feed.match(/content_html/g)?.length).toBe(2);
-    expect(await fs.readFile(path.join(site, "build/2026/05/12/extra-2/index.html"), "utf8")).toContain("<p>Raw 2</p>");
-    expect(await fs.readFile(path.join(site, "build/2026/05/12/extra-2/index.html"), "utf8")).toContain("<br>");
+    const postHtml = await fs.readFile(path.join(site, "build/2026/05/12/extra-2/index.html"), "utf8");
+    expect(postHtml).toContain("<p>Raw 2</p>");
+    expect(postHtml).toContain("<br>");
+    expect(postHtml).toContain('<meta name="description" content="Raw 2 Line one Line two">');
+    expect(postHtml).not.toContain('<meta name="description" content="Desc">');
   });
 
   it("can hide the default powered-by footer link", async () => {

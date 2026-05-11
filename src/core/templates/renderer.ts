@@ -38,6 +38,14 @@ function categorySlug(category: string): string {
   return category.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
+function plainTextFromHtml(html: string): string {
+  return html
+    .replace(/<(br|\/p|\/div|\/li|\/h[1-6]|\/blockquote)\b[^>]*>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function serializePost(post: NormalizedPost): Record<string, unknown> {
   return {
     ...post,
@@ -96,11 +104,16 @@ export function createTemplateRenderer(root: string, config: InksteadConfig, col
     return existsSync(path.join(themeDir, candidate)) ? page.slug : "page";
   }
 
-  function meta(title: string, canonicalUrl: string): Record<string, string> {
+  function meta(title: string, canonicalUrl: string, description = config.site.description): Record<string, string | undefined> {
     return {
       title: title === config.site.title ? title : `${title} - ${config.site.title}`,
-      canonicalUrl
+      canonicalUrl,
+      description
     };
+  }
+
+  function metaDescriptionForPost(post: NormalizedPost): string | undefined {
+    return plainTextFromHtml(post.excerpt) || config.site.description;
   }
 
   return {
@@ -125,7 +138,7 @@ export function createTemplateRenderer(root: string, config: InksteadConfig, col
     }),
     post: (post) => renderBody("post", {
       post: serializePost(post),
-      meta: meta(titleForPost(post), post.canonicalUrl)
+      meta: meta(titleForPost(post), post.canonicalUrl, metaDescriptionForPost(post))
     }),
     page: (page) => renderBody(pageTemplate(page), {
       page,

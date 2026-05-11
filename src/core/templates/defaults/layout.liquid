@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ meta.title }}</title>
-  {% if site.description %}<meta name="description" content="{{ site.description | escape }}">{% endif %}
+  {% if meta.description %}<meta name="description" content="{{ meta.description | escape }}">{% endif %}
   <meta property="og:title" content="{{ meta.title | escape }}">
-  {% if site.description %}<meta property="og:description" content="{{ site.description | escape }}">{% endif %}
+  {% if meta.description %}<meta property="og:description" content="{{ meta.description | escape }}">{% endif %}
   {% if meta.canonicalUrl %}<link rel="canonical" href="{{ meta.canonicalUrl }}"><meta property="og:url" content="{{ meta.canonicalUrl }}">{% endif %}
   <link rel="alternate" type="application/rss+xml" title="{{ site.title | escape }} RSS" href="/feed.xml">
   <link rel="alternate" type="application/feed+json" title="{{ site.title | escape }} JSON Feed" href="/feed.json">
