@@ -41,7 +41,7 @@ export function navigate(route: string): void {
 
 export function App(): JSX.Element {
   const [config, setConfig] = useState<WriterPublicConfig>();
-  const [token, setToken] = useState<string>();
+  const [token, setToken] = useState<string | undefined>(() => getRememberedToken());
   const [route, setRoute] = useState<Route>(parseRoute);
   const [error, setError] = useState<string>();
   const [direction, setDirection] = useState<TransitionDirection>("forward");
@@ -50,7 +50,6 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     loadWriterConfig().then(setConfig).catch((err: Error) => setError(err.message));
-    setToken(getRememberedToken());
     const onHashChange = () => {
       const nextRoute = parseRoute();
       setDirection(routeDepth[nextRoute.name] < routeDepth[previousRoute.current.name] ? "back" : "forward");
@@ -70,7 +69,8 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     if (config?.provider === "local" && route.name === "connect") navigate("/posts");
-  }, [config, route.name]);
+    if (config?.provider !== "local" && token && route.name === "connect") navigate("/posts");
+  }, [config, route.name, token]);
 
   function screen(content: ReactNode): JSX.Element {
     return <div key={`${route.name}${"path" in route ? route.path : ""}`} className={`route-screen ${hasNavigated.current ? `route-${direction}` : "route-initial"}`}>{content}</div>;

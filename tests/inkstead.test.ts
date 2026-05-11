@@ -1169,6 +1169,7 @@ describe("writer core", () => {
   it("ships Writer PWA metadata and Inkstead app icons", async () => {
     const index = await fs.readFile(path.join(process.cwd(), "src/writer/app/index.html"), "utf8");
     expect(index).toContain("location.replace");
+    expect(index).toContain('<meta name="robots" content="noindex, nofollow" />');
     const manifest = JSON.parse(await fs.readFile(path.join(process.cwd(), "src/writer/app/public/manifest.webmanifest"), "utf8"));
     expect(manifest.name).toBe("Inkstead Writer");
     expect(manifest.display).toBe("fullscreen");
