@@ -40,7 +40,7 @@ function timeSuffix(now = new Date()): string {
 }
 
 export function slugForNewPost(title: string | undefined, body = "", now = new Date()): string {
-  const text = title?.trim() || postExcerpt(body, 80) || `untitled-${timeSuffix(now)}`;
+  const text = title?.trim() || postSlugText(body, 80) || `untitled-${timeSuffix(now)}`;
   return `${datePrefix(now)}-${slugifyTitle(text) || `untitled-${timeSuffix(now)}`}`;
 }
 
@@ -72,7 +72,24 @@ export function postDateSortValue(post: Pick<PostSummary, "date" | "updatedAt">)
   return post.date ?? post.updatedAt ?? "";
 }
 
-export function postExcerpt(markdown: string, maxLength = 120): string | undefined {
+export function postExcerpt(markdown: string, maxLength = 80): string | undefined {
+  const text = markdown
+    .split(/\r?\n/)
+    .map((line) => line
+      .replace(/!\[[^\]]*]\([^)]*\)/g, "")
+      .replace(/<img\b[^>]*(?:>|$)/gi, "")
+      .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/[`*_>#-]/g, "")
+      .replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D]/gu, "")
+      .replace(/\s+/g, " ")
+      .trim())
+    .find((line) => line.length > 0);
+  if (!text) return undefined;
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1).trimEnd()}…` : text;
+}
+
+function postSlugText(markdown: string, maxLength: number): string | undefined {
   const text = markdown
     .replace(/\r?\n+/g, " ")
     .replace(/!\[[^\]]*]\([^)]*\)/g, "")
@@ -80,10 +97,11 @@ export function postExcerpt(markdown: string, maxLength = 120): string | undefin
     .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
     .replace(/<[^>]+>/g, " ")
     .replace(/[`*_>#-]/g, "")
+    .replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D]/gu, "")
     .replace(/\s+/g, " ")
     .trim();
   if (!text) return undefined;
-  return text.length > maxLength ? `${text.slice(0, maxLength - 1).trimEnd()}…` : text;
+  return text.length > maxLength ? text.slice(0, maxLength - 1).trimEnd() : text;
 }
 
 export function postListLabel(post: Pick<PostSummary, "title" | "excerpt">): string {

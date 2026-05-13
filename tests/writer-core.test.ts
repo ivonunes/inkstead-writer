@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parsePostMarkdown, serializePostMarkdown } from "../src/writer/app/core/frontmatter.js";
 import { categoriesFromFrontmatter, shouldShowCategoryTargets, shouldShowSyndicationTargets, syndicationTargetsFromFrontmatter, unmanagedCategoriesFromFrontmatter } from "../src/writer/app/core/editor-state.js";
+import { isPostFileCacheStale, isPostSummaryCacheStale, removePostFile, removePostSummary, upsertPostFile, upsertPostSummary } from "../src/writer/app/core/post-cache.js";
 import { buildPostMarkdown, formatPostDate, postDateSortValue, postExcerpt, postListLabel, postStatusLabel, slugForNewPost, slugifyTitle, summarizePost } from "../src/writer/app/core/posts.js";
 import { extractMarkdownImageReferences } from "../src/writer/app/core/markdown.js";
 import { markdownMediaReference, mediaAssetPath, referencedMediaPaths, uniqueAssetFilename } from "../src/writer/app/core/assets.js";
@@ -53,8 +54,10 @@ describe("writer core", () => {
 
   it("uses note content as the Writer post list label when there is no title", () => {
     expect(postExcerpt("A small note with a [link](https://example.com).\n\n![](/media/a.jpg)")).toBe("A small note with a link.");
-    expect(postExcerpt("First line\nSecond line")).toBe("First line Second line");
-    expect(postExcerpt("📍 New York, USA 📷 iPhone 16 Pro <img src=\"/media/img0931.jpeg\"")).toBe("📍 New York, USA 📷 iPhone 16 Pro");
+    expect(postExcerpt("First line\nSecond line")).toBe("First line");
+    expect(postExcerpt("📍 New York, USA 📷 iPhone 16 Pro <img src=\"/media/img0931.jpeg\"")).toBe("New York, USA iPhone 16 Pro");
+    expect(postExcerpt("![](/media/a.jpg)\n  ✨ A note after an image")).toBe("A note after an image");
+    expect(postExcerpt("This is a deliberately long note line that should be shortened before it creates too much noise in the Writer list.")).toBe("This is a deliberately long note line that should be shortened before it create…");
     expect(postListLabel({ excerpt: "A small note." })).toBe("A small note.");
     expect(postListLabel({ title: "Named", excerpt: "Body" })).toBe("Named");
     expect(postListLabel({})).toBe("Untitled");
@@ -234,5 +237,29 @@ describe("writer core", () => {
     expect(syndicationTargetsFromFrontmatter(["mastodon", "unknown"], ["mastodon", "bluesky"])).toEqual(["mastodon"]);
     expect(categoriesFromFrontmatter(["Photography", "Travel"], ["Photography"])).toEqual(["Photography"]);
     expect(unmanagedCategoriesFromFrontmatter(["Photography", "Travel"], ["Photography"])).toEqual(["Travel"]);
+  });
+
+  it("updates cached Writer post summaries without losing date ordering", () => {
+    const older = { path: "content/posts/older.md", slug: "older", status: "published" as const, date: "2026-05-10T10:00:00.000Z", title: "Older" };
+    const newer = { path: "content/posts/newer.md", slug: "newer", status: "published" as const, date: "2026-05-12T10:00:00.000Z", title: "Newer" };
+    const middle = { path: "content/posts/middle.md", slug: "middle", status: "draft" as const, date: "2026-05-11T10:00:00.000Z", title: "Middle" };
+    expect(upsertPostSummary([older, newer], middle).map((post) => post.slug)).toEqual(["newer", "middle", "older"]);
+    expect(upsertPostSummary([older], { ...older, title: "Updated" })).toEqual([{ ...older, title: "Updated" }]);
+    expect(removePostSummary([older, newer], newer.path)?.map((post) => post.slug)).toEqual(["older"]);
+  });
+
+  it("marks Writer post summary caches stale after the refresh window", () => {
+    expect(isPostSummaryCacheStale(undefined, 1_000, 300)).toBe(true);
+    expect(isPostSummaryCacheStale(800, 1_000, 300)).toBe(false);
+    expect(isPostSummaryCacheStale(700, 1_000, 300)).toBe(true);
+  });
+
+  it("updates cached Writer post files by path", () => {
+    const post = { path: "content/posts/post.md", slug: "post", status: "published" as const, content: "Body" };
+    expect(upsertPostFile({}, post, 1_000)).toEqual({ [post.path]: { post, loadedAt: 1_000 } });
+    expect(removePostFile({ [post.path]: { post, loadedAt: 1_000 } }, post.path)).toEqual({});
+    expect(isPostFileCacheStale(undefined, 1_000, 300)).toBe(true);
+    expect(isPostFileCacheStale({ post, loadedAt: 800 }, 1_000, 300)).toBe(false);
+    expect(isPostFileCacheStale({ post, loadedAt: 700 }, 1_000, 300)).toBe(true);
   });
 });

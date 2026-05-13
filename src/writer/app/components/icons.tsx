@@ -37,3 +37,7 @@ export function TrashIcon(props: IconProps): JSX.Element {
 export function PlusIcon(props: IconProps): JSX.Element {
   return <IconBase {...props}><path d="M12 5v14" /><path d="M5 12h14" /></IconBase>;
 }
+
+export function RefreshIcon(props: IconProps): JSX.Element {
+  return <IconBase {...props}><path d="M21 12a9 9 0 0 0-15.1-6.6L3 8" /><path d="M3 3v5h5" /><path d="M3 12a9 9 0 0 0 15.1 6.6L21 16" /><path d="M16 16h5v5" /></IconBase>;
+}

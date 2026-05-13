@@ -68,16 +68,19 @@ function frontmatterDate(value: unknown): string | undefined {
   return undefined;
 }
 
-function postExcerpt(markdown: string, maxLength = 120): string | undefined {
+function postExcerpt(markdown: string, maxLength = 80): string | undefined {
   const text = markdown
-    .replace(/\r?\n+/g, " ")
-    .replace(/!\[[^\]]*]\([^)]*\)/g, "")
-    .replace(/<img\b[^>]*(?:>|$)/gi, "")
-    .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/[`*_>#-]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+    .split(/\r?\n/)
+    .map((line) => line
+      .replace(/!\[[^\]]*]\([^)]*\)/g, "")
+      .replace(/<img\b[^>]*(?:>|$)/gi, "")
+      .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/[`*_>#-]/g, "")
+      .replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D]/gu, "")
+      .replace(/\s+/g, " ")
+      .trim())
+    .find((line) => line.length > 0);
   if (!text) return undefined;
   return text.length > maxLength ? `${text.slice(0, maxLength - 1).trimEnd()}…` : text;
 }
