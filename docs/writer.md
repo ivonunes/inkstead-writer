@@ -22,7 +22,8 @@ export default defineConfig({
     provider: "github",
     owner: "example-user",
     repo: "example-site",
-    branch: "main"
+    branch: "main",
+    categories: ["Photography", "Essays"]
   }
 });
 ```
@@ -32,6 +33,23 @@ When you build the site, Inkstead copies Writer into the output directory at `/w
 Secrets are never written to this config file. Writer asks for a personal access token in the browser.
 
 ![Inkstead Writer editing a post.](/assets/writer-editor.png)
+
+## Categories
+
+Writer can show category toggles for the categories you use most often:
+
+```ts
+writer: {
+  enabled: true,
+  provider: "github",
+  owner: "example-user",
+  repo: "example-site",
+  branch: "main",
+  categories: ["Photography", "Essays"]
+}
+```
+
+If `categories` is omitted or empty, Writer does not show category controls.
 
 ## Providers
 

@@ -20,7 +20,9 @@ export function publicWriterConfig(config: InksteadConfig): PublicWriterConfig |
     repo: config.writer.repo,
     branch: config.writer.branch,
     postsPath: config.content.posts,
-    mediaPath: config.content.media
+    mediaPath: config.content.media,
+    syndicationProviders: config.syndication?.providers ?? [],
+    categories: config.writer.categories ?? []
   };
 }
 

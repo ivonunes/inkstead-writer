@@ -10,11 +10,14 @@ export interface WriterConfig {
   owner?: string;
   repo?: string;
   branch?: string;
+  categories?: string[];
 }
 
 export type PublicWriterConfig = Omit<WriterConfig, "enabled" | "path"> & {
   postsPath: string;
   mediaPath: string;
+  syndicationProviders: SyndicationProviderName[];
+  categories: string[];
 };
 
 export interface InksteadConfig {

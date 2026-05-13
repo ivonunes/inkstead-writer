@@ -1,4 +1,4 @@
-export type FrontmatterValue = string | undefined;
+export type FrontmatterValue = string | string[] | undefined;
 export type WriterFrontmatter = Record<string, FrontmatterValue>;
 
 export interface ParsedPostMarkdown {
@@ -26,10 +26,25 @@ export function parsePostMarkdown(markdown: string): ParsedPostMarkdown {
 
   const frontmatter: WriterFrontmatter = {};
   const rawFrontmatter = markdown.slice(4, end).trim();
+  let currentListKey: string | undefined;
   for (const line of rawFrontmatter.split("\n")) {
+    const item = line.match(/^\s*-\s*(.*)$/);
+    if (item && currentListKey) {
+      const list = frontmatter[currentListKey];
+      frontmatter[currentListKey] = [...(Array.isArray(list) ? list : []), unquote(item[1] ?? "")];
+      continue;
+    }
     const match = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
     if (!match) continue;
-    frontmatter[match[1]] = unquote(match[2] ?? "");
+    const value = match[2] ?? "";
+    const trimmed = value.trim();
+    if (trimmed === "[]") {
+      currentListKey = undefined;
+      frontmatter[match[1]] = [];
+      continue;
+    }
+    currentListKey = trimmed === "" ? match[1] : undefined;
+    frontmatter[match[1]] = currentListKey ? [] : unquote(value);
   }
 
   const bodyStart = markdown.slice(end + 4).replace(/^\n+/, "");
@@ -38,7 +53,12 @@ export function parsePostMarkdown(markdown: string): ParsedPostMarkdown {
 
 export function serializePostMarkdown(frontmatter: WriterFrontmatter, body: string): string {
   const lines = Object.entries(frontmatter)
-    .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0)
-    .map(([key, value]) => `${key}: ${quote(value)}`);
+    .filter((entry): entry is [string, string | string[]] => {
+      if (typeof entry[1] === "string") return entry[1].length > 0;
+      return Array.isArray(entry[1]);
+    })
+    .flatMap(([key, value]) => Array.isArray(value)
+      ? value.length > 0 ? [`${key}:`, ...value.map((item) => `  - ${quote(item)}`)] : [`${key}: []`]
+      : [`${key}: ${quote(value)}`]);
   return `---\n${lines.join("\n")}\n---\n\n${body.replace(/^\n+/, "")}`;
 }

@@ -319,7 +319,9 @@ export default defineConfig({
       repo: "site",
       branch: "main",
       postsPath: "content/posts",
-      mediaPath: "content/media"
+      mediaPath: "content/media",
+      syndicationProviders: [],
+      categories: []
     });
     expect(JSON.stringify(publicConfig)).not.toContain("token");
   });
@@ -593,11 +595,18 @@ export default defineConfig({
 
 describe("writer core", () => {
   it("parses and serializes Writer frontmatter", () => {
-    const parsed = parsePostMarkdown("---\ntitle: \"A Post\"\nstatus: draft\nupdated_at: 2026-05-11T10:00:00.000Z\n---\n\nBody");
+    const parsed = parsePostMarkdown("---\ntitle: \"A Post\"\nstatus: draft\nsyndicate:\n  - mastodon\n  - bluesky\ncategories:\n  - Photography\nupdated_at: 2026-05-11T10:00:00.000Z\n---\n\nBody");
     expect(parsed.frontmatter.title).toBe("A Post");
     expect(parsed.frontmatter.status).toBe("draft");
+    expect(parsed.frontmatter.syndicate).toEqual(["mastodon", "bluesky"]);
+    expect(parsed.frontmatter.categories).toEqual(["Photography"]);
     expect(parsed.body).toBe("Body");
-    expect(serializePostMarkdown(parsed.frontmatter, parsed.body)).toContain("title: \"A Post\"");
+    const serialized = serializePostMarkdown(parsed.frontmatter, parsed.body);
+    expect(serialized).toContain("title: \"A Post\"");
+    expect(serialized).toContain("syndicate:\n  - mastodon\n  - bluesky");
+    expect(serialized).toContain("categories:\n  - Photography");
+    expect(parsePostMarkdown("---\nsyndicate: []\n---\n\nBody").frontmatter.syndicate).toEqual([]);
+    expect(serializePostMarkdown({ syndicate: [] }, "Body")).toContain("syndicate: []");
   });
 
   it("generates dated slugs from titles and untitled post content", () => {
@@ -663,6 +672,84 @@ describe("writer core", () => {
     expect(markdown).not.toContain("slug:");
   });
 
+  it("writes selected syndication targets for new Writer posts", () => {
+    const markdown = buildPostMarkdown({
+      title: "",
+      slug: "note",
+      status: "draft",
+      body: "Body",
+      syndicationTargets: ["mastodon", "bluesky"],
+      now: new Date("2026-05-11T10:00:00.000Z")
+    });
+    expect(markdown).toContain("syndicate:\n  - mastodon\n  - bluesky");
+  });
+
+  it("preserves existing syndication targets when editing Writer posts", () => {
+    const markdown = buildPostMarkdown({
+      title: "Published",
+      slug: "published",
+      status: "published",
+      body: "Updated",
+      existingMarkdown: "---\ntitle: Published\ndate: 2026-05-01T10:00:00.000Z\nsyndicate:\n  - mastodon\n---\n\nBody",
+      now: new Date("2026-05-11T10:00:00.000Z")
+    });
+    expect(markdown).toContain("syndicate:\n  - mastodon");
+  });
+
+  it("updates syndication targets when editing Writer drafts", () => {
+    const markdown = buildPostMarkdown({
+      title: "Draft",
+      slug: "draft",
+      status: "draft",
+      body: "Updated",
+      existingMarkdown: "---\ntitle: Draft\nstatus: draft\nsyndicate:\n  - mastodon\n  - bluesky\n---\n\nBody",
+      syndicationTargets: ["bluesky"],
+      now: new Date("2026-05-11T10:00:00.000Z")
+    });
+    expect(markdown).toContain("syndicate:\n  - bluesky");
+    expect(markdown).not.toContain("  - mastodon");
+  });
+
+  it("records an empty syndication list when all draft targets are disabled", () => {
+    const markdown = buildPostMarkdown({
+      title: "Draft",
+      slug: "draft",
+      status: "draft",
+      body: "Updated",
+      existingMarkdown: "---\ntitle: Draft\nstatus: draft\nsyndicate:\n  - mastodon\n---\n\nBody",
+      syndicationTargets: [],
+      now: new Date("2026-05-11T10:00:00.000Z")
+    });
+    expect(markdown).toContain("syndicate: []");
+  });
+
+  it("writes selected Writer categories", () => {
+    const markdown = buildPostMarkdown({
+      title: "Categorized",
+      slug: "categorized",
+      status: "published",
+      body: "Body",
+      existingMarkdown: "---\ntitle: Categorized\ndate: 2026-05-01T10:00:00.000Z\ncategories:\n  - Essays\n---\n\nBody",
+      categoryTargets: ["Photography"],
+      now: new Date("2026-05-11T10:00:00.000Z")
+    });
+    expect(markdown).toContain("categories:\n  - Photography");
+    expect(markdown).not.toContain("  - Essays");
+  });
+
+  it("records an empty category list when all configured categories are disabled", () => {
+    const markdown = buildPostMarkdown({
+      title: "Categorized",
+      slug: "categorized",
+      status: "published",
+      body: "Body",
+      existingMarkdown: "---\ntitle: Categorized\ndate: 2026-05-01T10:00:00.000Z\ncategories:\n  - Essays\n---\n\nBody",
+      categoryTargets: [],
+      now: new Date("2026-05-11T10:00:00.000Z")
+    });
+    expect(markdown).toContain("categories: []");
+  });
+
   it("preserves the post date when saving an already published post", () => {
     const markdown = buildPostMarkdown({
       title: "Published",
@@ -705,13 +792,15 @@ describe("writer core", () => {
     expect(publicWriterConfig({
       site: { title: "My Website", url: "https://example.com", author: "Your Name" },
       content: { posts: "content/posts", pages: "content/pages", media: "content/media" },
+      syndication: { providers: ["mastodon", "bluesky"] },
       writer: {
         enabled: true,
         path: "/writer",
         provider: "github",
         owner: "me",
         repo: "site",
-        branch: "main"
+        branch: "main",
+        categories: ["Photography", "Essays"]
       }
     })).toEqual({
       provider: "github",
@@ -719,7 +808,9 @@ describe("writer core", () => {
       repo: "site",
       branch: "main",
       postsPath: "content/posts",
-      mediaPath: "content/media"
+      mediaPath: "content/media",
+      syndicationProviders: ["mastodon", "bluesky"],
+      categories: ["Photography", "Essays"]
     });
   });
 

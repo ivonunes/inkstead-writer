@@ -4,7 +4,7 @@ import { Button } from "../components/Button.js";
 import { Dialog } from "../components/Dialog.js";
 import { ArrowLeftIcon, EyeIcon, ImageIcon, SaveIcon, TrashIcon, UploadIcon } from "../components/icons.js";
 import { StatusBar } from "../components/StatusBar.js";
-import type { WriterPublicConfig } from "../core/config.js";
+import type { SyndicationProvider, WriterPublicConfig } from "../core/config.js";
 import { buildPostMarkdown, filenameSlug, postPath as buildPostPath, slugForNewPost, type PostStatus } from "../core/posts.js";
 import { fileToBase64, markdownMediaReference, maxMediaUploadBytes, mediaAssetPath, referencedMediaPaths, uniqueAssetFilename, type PendingAsset } from "../core/assets.js";
 import { parsePostMarkdown } from "../core/frontmatter.js";
@@ -14,9 +14,29 @@ function isExistingPostError(error: unknown): boolean {
   return error instanceof Error && /already exists\.$/.test(error.message);
 }
 
+function syndicationTargetsFromFrontmatter(value: unknown, fallback: SyndicationProvider[]): SyndicationProvider[] {
+  if (!Array.isArray(value)) return fallback;
+  return value.filter((item): item is SyndicationProvider => fallback.includes(item as SyndicationProvider));
+}
+
+function categoriesFromFrontmatter(value: unknown, configuredCategories: string[]): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && configuredCategories.includes(item));
+}
+
+function unmanagedCategoriesFromFrontmatter(value: unknown, configuredCategories: string[]): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && !configuredCategories.includes(item));
+}
+
 export function Editor({ adapter, config, postPath }: { adapter: RepositoryAdapter; config: WriterPublicConfig; postPath?: string }): JSX.Element {
+  const configuredSyndicationProviders = config.syndicationProviders ?? [];
+  const configuredCategories = config.categories ?? [];
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [syndicationTargets, setSyndicationTargets] = useState<SyndicationProvider[]>(configuredSyndicationProviders);
+  const [categoryTargets, setCategoryTargets] = useState<string[]>([]);
+  const [unmanagedCategoryTargets, setUnmanagedCategoryTargets] = useState<string[]>([]);
   const [sha, setSha] = useState<string>();
   const [path, setPath] = useState(postPath);
   const [slug, setSlug] = useState("");
@@ -33,6 +53,9 @@ export function Editor({ adapter, config, postPath }: { adapter: RepositoryAdapt
   const currentSlug = useMemo(() => slug || slugForNewPost(title, body), [slug, title, body]);
   const hasContent = title.trim().length > 0 || body.trim().length > 0 || pendingAssets.current.length > 0;
   const hasUnsavedChanges = status === "Unsaved" && Boolean(path || hasContent);
+  const canEditSyndicationTargets = postStatus === "draft";
+  const showSyndicationTargets = canEditSyndicationTargets && configuredSyndicationProviders.length > 0;
+  const showCategoryTargets = configuredCategories.length > 0;
 
   useEffect(() => {
     if (!postPath) {
@@ -41,13 +64,16 @@ export function Editor({ adapter, config, postPath }: { adapter: RepositoryAdapt
     }
     adapter.readPost(postPath).then((post) => {
       const parsed = parsePostMarkdown(post.content);
-      setTitle(parsed.frontmatter.title ?? "");
+      setTitle(typeof parsed.frontmatter.title === "string" ? parsed.frontmatter.title : "");
       setBody(parsed.body);
       setSha(post.sha);
       setPath(post.path);
       setSlug(post.slug || filenameSlug(post.path));
       setOriginalMarkdown(post.content);
       setPostStatus(post.status);
+      setSyndicationTargets(syndicationTargetsFromFrontmatter(parsed.frontmatter.syndicate, configuredSyndicationProviders));
+      setCategoryTargets(categoriesFromFrontmatter(parsed.frontmatter.categories, configuredCategories));
+      setUnmanagedCategoryTargets(unmanagedCategoriesFromFrontmatter(parsed.frontmatter.categories, configuredCategories));
       setStatus("Saved");
     }).catch((err: Error) => setError(err.message));
   }, [adapter, postPath]);
@@ -76,6 +102,20 @@ export function Editor({ adapter, config, postPath }: { adapter: RepositoryAdapt
       textarea.focus();
       textarea.selectionStart = textarea.selectionEnd = start + markdown.length;
     });
+  }
+
+  function toggleSyndicationTarget(provider: SyndicationProvider): void {
+    setSyndicationTargets((current) => current.includes(provider)
+      ? current.filter((item) => item !== provider)
+      : [...current, provider]);
+    setStatus("Unsaved");
+  }
+
+  function toggleCategoryTarget(category: string): void {
+    setCategoryTargets((current) => current.includes(category)
+      ? current.filter((item) => item !== category)
+      : [...current, category]);
+    setStatus("Unsaved");
   }
 
   async function addFiles(files: FileList | File[]): Promise<void> {
@@ -130,7 +170,16 @@ export function Editor({ adapter, config, postPath }: { adapter: RepositoryAdapt
       for (let attempt = 1; attempt <= 20 && !saved; attempt += 1) {
         nextSlug = path || attempt === 1 ? baseSlug : `${baseSlug}-${attempt}`;
         nextPath = path ?? buildPostPath(config.postsPath, nextSlug);
-        const content = buildPostMarkdown({ title, slug: nextSlug, status: nextStatus, body, existingMarkdown: originalMarkdown, updateDate: options.updateDate });
+        const content = buildPostMarkdown({
+          title,
+          slug: nextSlug,
+          status: nextStatus,
+          body,
+          existingMarkdown: originalMarkdown,
+          updateDate: options.updateDate,
+          syndicationTargets: canEditSyndicationTargets ? syndicationTargets : undefined,
+          categoryTargets: showCategoryTargets ? [...unmanagedCategoryTargets, ...categoryTargets] : undefined
+        });
         try {
           await adapter.savePost({ path: nextPath, slug: nextSlug, status: nextStatus, content, sha, media });
           saved = true;
@@ -235,6 +284,40 @@ export function Editor({ adapter, config, postPath }: { adapter: RepositoryAdapt
         setTitle(event.target.value);
         setStatus("Unsaved");
       }} placeholder="Title (optional)" />
+      {showSyndicationTargets ? (
+        <section className="frontmatter-targets" aria-label="Syndication targets">
+          <p>Syndicate to</p>
+          <div>
+            {configuredSyndicationProviders.map((provider) => (
+              <label key={provider} className="target-chip">
+                <input
+                  type="checkbox"
+                  checked={syndicationTargets.includes(provider)}
+                  onChange={() => toggleSyndicationTarget(provider)}
+                />
+                <span>{provider}</span>
+              </label>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {showCategoryTargets ? (
+        <section className="frontmatter-targets" aria-label="Categories">
+          <p>Categories</p>
+          <div>
+            {configuredCategories.map((category) => (
+              <label key={category} className="target-chip">
+                <input
+                  type="checkbox"
+                  checked={categoryTargets.includes(category)}
+                  onChange={() => toggleCategoryTarget(category)}
+                />
+                <span>{category}</span>
+              </label>
+            ))}
+          </div>
+        </section>
+      ) : null}
       <textarea
         ref={textareaRef}
         className="markdown-editor"

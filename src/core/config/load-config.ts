@@ -67,7 +67,8 @@ const configSchema = z.object({
     provider: z.enum(["github", "gitlab", "local"]),
     owner: z.string().min(1).optional(),
     repo: z.string().min(1).optional(),
-    branch: z.string().min(1).optional()
+    branch: z.string().min(1).optional(),
+    categories: z.array(z.string().min(1)).optional()
   }).strict().optional(),
   ci: z.object({ provider: z.enum(["github-actions", "gitlab-ci"]) }).optional(),
   deploy: z.discriminatedUnion("provider", [

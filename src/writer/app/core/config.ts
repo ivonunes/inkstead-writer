@@ -1,4 +1,5 @@
 export type WriterProvider = "github" | "gitlab" | "local";
+export type SyndicationProvider = "mastodon" | "bluesky" | "flickr";
 
 export interface WriterPublicConfig {
   provider: WriterProvider;
@@ -7,6 +8,8 @@ export interface WriterPublicConfig {
   branch?: string;
   postsPath: string;
   mediaPath: string;
+  syndicationProviders?: SyndicationProvider[];
+  categories?: string[];
 }
 
 export async function loadWriterConfig(): Promise<WriterPublicConfig> {

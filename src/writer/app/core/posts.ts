@@ -54,16 +54,17 @@ export function filenameSlug(filePath: string): string {
 
 export function summarizePost(path: string, markdown: string): PostSummary {
   const parsed = parsePostMarkdown(markdown);
-  const slug = parsed.frontmatter.slug || filenameSlug(path);
+  const slug = typeof parsed.frontmatter.slug === "string" ? parsed.frontmatter.slug : filenameSlug(path);
+  const title = typeof parsed.frontmatter.title === "string" ? parsed.frontmatter.title : undefined;
   const status = parsed.frontmatter.status === "draft" ? "draft" : "published";
   return {
     path,
     slug,
-    title: parsed.frontmatter.title,
+    title,
     excerpt: postExcerpt(parsed.body),
     status,
-    date: parsed.frontmatter.date,
-    updatedAt: parsed.frontmatter.updated_at
+    date: typeof parsed.frontmatter.date === "string" ? parsed.frontmatter.date : undefined,
+    updatedAt: typeof parsed.frontmatter.updated_at === "string" ? parsed.frontmatter.updated_at : undefined
   };
 }
 
@@ -107,6 +108,8 @@ export function buildPostMarkdown(options: {
   body: string;
   existingMarkdown?: string;
   updateDate?: boolean;
+  syndicationTargets?: string[];
+  categoryTargets?: string[];
   now?: Date;
 }): string {
   const parsed = options.existingMarkdown ? parsePostMarkdown(options.existingMarkdown) : { frontmatter: {}, body: "" };
@@ -116,8 +119,10 @@ export function buildPostMarkdown(options: {
     title: options.title?.trim() || undefined,
     slug: undefined,
     status: options.status === "draft" ? "draft" : undefined,
-    date: options.updateDate ? now : parsed.frontmatter.date,
+    date: options.updateDate ? now : typeof parsed.frontmatter.date === "string" ? parsed.frontmatter.date : undefined,
     updated_at: now
   };
+  if (options.syndicationTargets !== undefined) frontmatter.syndicate = options.syndicationTargets;
+  if (options.categoryTargets !== undefined) frontmatter.categories = options.categoryTargets;
   return serializePostMarkdown(frontmatter, options.body);
 }
