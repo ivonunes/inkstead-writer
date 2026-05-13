@@ -5,6 +5,7 @@ import { Dialog } from "../components/Dialog.js";
 import { ArrowLeftIcon, EyeIcon, ImageIcon, SaveIcon, TrashIcon, UploadIcon } from "../components/icons.js";
 import { StatusBar } from "../components/StatusBar.js";
 import type { SyndicationProvider, WriterPublicConfig } from "../core/config.js";
+import { categoriesFromFrontmatter, shouldShowCategoryTargets, shouldShowSyndicationTargets, syndicationTargetsFromFrontmatter, unmanagedCategoriesFromFrontmatter } from "../core/editor-state.js";
 import { buildPostMarkdown, filenameSlug, postPath as buildPostPath, slugForNewPost, type PostStatus } from "../core/posts.js";
 import { fileToBase64, markdownMediaReference, maxMediaUploadBytes, mediaAssetPath, referencedMediaPaths, uniqueAssetFilename, type PendingAsset } from "../core/assets.js";
 import { parsePostMarkdown } from "../core/frontmatter.js";
@@ -12,21 +13,6 @@ import { navigate } from "../App.js";
 
 function isExistingPostError(error: unknown): boolean {
   return error instanceof Error && /already exists\.$/.test(error.message);
-}
-
-function syndicationTargetsFromFrontmatter(value: unknown, fallback: SyndicationProvider[]): SyndicationProvider[] {
-  if (!Array.isArray(value)) return fallback;
-  return value.filter((item): item is SyndicationProvider => fallback.includes(item as SyndicationProvider));
-}
-
-function categoriesFromFrontmatter(value: unknown, configuredCategories: string[]): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string" && configuredCategories.includes(item));
-}
-
-function unmanagedCategoriesFromFrontmatter(value: unknown, configuredCategories: string[]): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string" && !configuredCategories.includes(item));
 }
 
 export function Editor({ adapter, config, postPath }: { adapter: RepositoryAdapter; config: WriterPublicConfig; postPath?: string }): JSX.Element {
@@ -54,8 +40,8 @@ export function Editor({ adapter, config, postPath }: { adapter: RepositoryAdapt
   const hasContent = title.trim().length > 0 || body.trim().length > 0 || pendingAssets.current.length > 0;
   const hasUnsavedChanges = status === "Unsaved" && Boolean(path || hasContent);
   const canEditSyndicationTargets = postStatus === "draft";
-  const showSyndicationTargets = canEditSyndicationTargets && configuredSyndicationProviders.length > 0;
-  const showCategoryTargets = configuredCategories.length > 0;
+  const showSyndicationTargets = shouldShowSyndicationTargets(postStatus, configuredSyndicationProviders);
+  const showCategoryTargets = shouldShowCategoryTargets(configuredCategories);
 
   useEffect(() => {
     if (!postPath) {

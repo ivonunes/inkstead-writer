@@ -1,4 +1,8 @@
-export type FrontmatterValue = string | string[] | undefined;
+export interface RawFrontmatterBlock {
+  raw: string[];
+}
+
+export type FrontmatterValue = string | string[] | RawFrontmatterBlock | undefined;
 export type WriterFrontmatter = Record<string, FrontmatterValue>;
 
 export interface ParsedPostMarkdown {
@@ -26,25 +30,29 @@ export function parsePostMarkdown(markdown: string): ParsedPostMarkdown {
 
   const frontmatter: WriterFrontmatter = {};
   const rawFrontmatter = markdown.slice(4, end).trim();
-  let currentListKey: string | undefined;
-  for (const line of rawFrontmatter.split("\n")) {
-    const item = line.match(/^\s*-\s*(.*)$/);
-    if (item && currentListKey) {
-      const list = frontmatter[currentListKey];
-      frontmatter[currentListKey] = [...(Array.isArray(list) ? list : []), unquote(item[1] ?? "")];
-      continue;
-    }
-    const match = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+  const lines = rawFrontmatter ? rawFrontmatter.split("\n") : [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index].match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
     if (!match) continue;
+    const key = match[1];
     const value = match[2] ?? "";
     const trimmed = value.trim();
     if (trimmed === "[]") {
-      currentListKey = undefined;
-      frontmatter[match[1]] = [];
+      frontmatter[key] = [];
       continue;
     }
-    currentListKey = trimmed === "" ? match[1] : undefined;
-    frontmatter[match[1]] = currentListKey ? [] : unquote(value);
+    if (trimmed !== "") {
+      frontmatter[key] = unquote(value);
+      continue;
+    }
+    const block: string[] = [];
+    while (index + 1 < lines.length && /^\s+/.test(lines[index + 1])) {
+      index += 1;
+      block.push(lines[index]);
+    }
+    frontmatter[key] = block.length > 0 && block.every((line) => /^\s*-\s*/.test(line))
+      ? block.map((line) => unquote(line.replace(/^\s*-\s*/, "")))
+      : { raw: block };
   }
 
   const bodyStart = markdown.slice(end + 4).replace(/^\n+/, "");
@@ -53,12 +61,14 @@ export function parsePostMarkdown(markdown: string): ParsedPostMarkdown {
 
 export function serializePostMarkdown(frontmatter: WriterFrontmatter, body: string): string {
   const lines = Object.entries(frontmatter)
-    .filter((entry): entry is [string, string | string[]] => {
+    .filter((entry): entry is [string, string | string[] | RawFrontmatterBlock] => {
       if (typeof entry[1] === "string") return entry[1].length > 0;
-      return Array.isArray(entry[1]);
+      return Array.isArray(entry[1]) || Boolean(entry[1] && typeof entry[1] === "object" && "raw" in entry[1]);
     })
-    .flatMap(([key, value]) => Array.isArray(value)
-      ? value.length > 0 ? [`${key}:`, ...value.map((item) => `  - ${quote(item)}`)] : [`${key}: []`]
-      : [`${key}: ${quote(value)}`]);
+    .flatMap(([key, value]) => {
+      if (Array.isArray(value)) return value.length > 0 ? [`${key}:`, ...value.map((item) => `  - ${quote(item)}`)] : [`${key}: []`];
+      if (typeof value === "object" && "raw" in value) return [`${key}:`, ...value.raw];
+      return [`${key}: ${quote(value)}`];
+    });
   return `---\n${lines.join("\n")}\n---\n\n${body.replace(/^\n+/, "")}`;
 }

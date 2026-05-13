@@ -39,6 +39,11 @@ export function navigate(route: string): void {
   window.location.hash = route;
 }
 
+export function shouldRedirectConnectToPosts(config: WriterPublicConfig | undefined, token: string | undefined, route: Pick<Route, "name">): boolean {
+  if (route.name !== "connect" || !config) return false;
+  return config.provider === "local" || Boolean(token);
+}
+
 export function App(): JSX.Element {
   const [config, setConfig] = useState<WriterPublicConfig>();
   const [token, setToken] = useState<string | undefined>(() => getRememberedToken());
@@ -68,8 +73,7 @@ export function App(): JSX.Element {
   }, [config, token]);
 
   useEffect(() => {
-    if (config?.provider === "local" && route.name === "connect") navigate("/posts");
-    if (config?.provider !== "local" && token && route.name === "connect") navigate("/posts");
+    if (shouldRedirectConnectToPosts(config, token, route)) navigate("/posts");
   }, [config, route.name, token]);
 
   function screen(content: ReactNode): JSX.Element {

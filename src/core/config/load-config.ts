@@ -68,7 +68,7 @@ const configSchema = z.object({
     owner: z.string().min(1).optional(),
     repo: z.string().min(1).optional(),
     branch: z.string().min(1).optional(),
-    categories: z.array(z.string().min(1)).optional()
+    categories: z.array(z.string().min(1)).refine((items) => new Set(items).size === items.length, "Writer categories must be unique.").optional()
   }).strict().optional(),
   ci: z.object({ provider: z.enum(["github-actions", "gitlab-ci"]) }).optional(),
   deploy: z.discriminatedUnion("provider", [
@@ -93,6 +93,17 @@ const configSchema = z.object({
       path: ["ci", "provider"],
       message: "GitLab Pages deployment requires GitLab CI."
     });
+  }
+  if (config.writer?.enabled && config.writer.provider !== "local") {
+    for (const field of ["owner", "repo", "branch"] as const) {
+      if (!config.writer[field]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["writer", field],
+          message: `Remote Writer provider requires ${field}.`
+        });
+      }
+    }
   }
 });
 
