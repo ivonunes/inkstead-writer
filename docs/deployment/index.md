@@ -22,6 +22,14 @@ cp .env.example .env
 
 Fill in the required values in `.env`, then run `npm run doctor` again. If you publish through CI, add the same names from `.env.example` as secrets or variables in your CI provider instead.
 
+If `doctor` says a generated workflow differs from Inkstead's current template, run:
+
+```bash
+npm run upgrade
+```
+
+The upgrade command updates generated workflow files such as `.github/workflows/publish.yml` or `.gitlab-ci.yml`. It asks before writing unless you pass `-- --force`.
+
 Adapter guides:
 
 - [Cloudflare Workers](./cloudflare-workers/)

@@ -1,7 +1,8 @@
 import path from "node:path";
 import { existsSync } from "node:fs";
-import { ciProviders, requirementsForConfig, uniqueEnvironmentVariables } from "./adapters/registry.js";
+import { requirementsForConfig, uniqueEnvironmentVariables } from "./adapters/registry.js";
 import type { CiProviderName, DeployProviderName, InksteadConfig, SyndicationProviderName, WriterProviderName } from "./config/types.js";
+import { expectedWorkflowFiles } from "./upgrade.js";
 import { writeFileEnsured } from "../utils/fs.js";
 
 export interface InitSiteOptions {
@@ -59,12 +60,7 @@ export async function initSite(directory = ".", options: InitSiteOptions = {}): 
   const projectName = path.basename(root);
   const config = siteConfig(projectName, options);
   const envNames = uniqueEnvironmentVariables(config);
-  const workflow = config.ci ? ciProviders[config.ci.provider].generateWorkflow({
-    environmentVariables: envNames,
-    deploymentProvider: config.deploy?.provider,
-    buildOutput: config.build?.output ?? "dist",
-    hasSyndication: Boolean(config.syndication?.providers.length)
-  })[0] : undefined;
+  const workflow = expectedWorkflowFiles(config)[0];
   const syndication = config.syndication?.providers ?? [];
   const files: Record<string, string> = {
     "package.json": JSON.stringify({
@@ -75,6 +71,7 @@ export async function initSite(directory = ".", options: InitSiteOptions = {}): 
         deploy: "inkstead deploy",
         publish: "inkstead publish",
         requirements: "inkstead requirements",
+        upgrade: "inkstead upgrade",
         doctor: "inkstead doctor"
       },
       dependencies: { inkstead: "^1.0.0" }
@@ -111,7 +108,7 @@ export default defineConfig(${JSON.stringify(config, null, 2)});
 3. Check your setup before publishing
    npm run doctor`;
 
-  return `Your Inkstead site has been created.
+  return `Inkstead site created.
 
 Next steps:
 

@@ -17,6 +17,13 @@ describe("init", () => {
     expect(pkg.dependencies).toEqual({ inkstead: "^1.0.0" });
   });
 
+  it("keeps previewing ahead of publishing setup in the generated next steps", async () => {
+    const site = path.join(fixture.tempRoot, "site");
+    const message = await initSite(site, { ci: "none", deploy: "none", syndication: [] });
+    expect(message.indexOf("npm run dev")).toBeLessThan(message.indexOf("npm run doctor"));
+    expect(message).not.toContain("cp .env.example .env");
+  });
+
   it("scaffolds selected adapters instead of always using defaults", async () => {
     const site = path.join(fixture.tempRoot, "site");
     await initSite(site, { ci: "none", deploy: "none", syndication: ["flickr"] });
@@ -105,4 +112,3 @@ describe("init", () => {
     expect(config).not.toContain('"path": "/writer"');
   });
 });
-

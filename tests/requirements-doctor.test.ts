@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadConfig, renderRequirements, runDoctor } from "../src/index.js";
+import { applyWorkflowUpgrades, loadConfig, renderRequirements, runDoctor, workflowUpgradePlan } from "../src/index.js";
 import { cloudflareWorkersProvider } from "../src/adapters/deploy/cloudflare-workers.js";
 import { useSiteFixture } from "./helpers/site.js";
 
@@ -39,6 +39,23 @@ export default defineConfig({
     expect(doctor.issues).toBeGreaterThan(0);
   });
 
+  it("detects and upgrades generated workflow drift", async () => {
+    const site = await fixture.makeSite();
+    const workflowPath = path.join(site, ".github/workflows/publish.yml");
+    await fs.writeFile(workflowPath, "name: Old workflow\n");
+    const config = await loadConfig(site);
+
+    const doctor = await runDoctor(site, config);
+    expect(doctor.output).toContain("differs from Inkstead's current template");
+    expect(doctor.output).toContain("run npm run upgrade");
+
+    const plan = await workflowUpgradePlan(site, config);
+    expect(plan.find((item) => item.path === ".github/workflows/publish.yml")?.status).toBe("changed");
+    await applyWorkflowUpgrades(site, plan);
+    const updatedPlan = await workflowUpgradePlan(site, config);
+    expect(updatedPlan.find((item) => item.path === ".github/workflows/publish.yml")?.status).toBe("current");
+  });
+
   it("supports GitHub Pages as a deployment provider without Cloudflare secrets", async () => {
     const site = await fixture.makeSite();
     await fs.writeFile(path.join(site, "site.config.ts"), `import { defineConfig } from "inkstead";
@@ -74,4 +91,3 @@ export default defineConfig({
     await expect(loadConfig(site)).rejects.toThrow("GitLab Pages deployment requires GitLab CI");
   });
 });
-

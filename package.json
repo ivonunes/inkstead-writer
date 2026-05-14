@@ -1,6 +1,6 @@
 {
   "name": "inkstead",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "type": "module",
   "description": "An opinionated publishing engine for personal indie websites",
   "author": "Ivo Nunes",
