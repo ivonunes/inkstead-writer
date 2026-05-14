@@ -72,26 +72,66 @@ function pageLayout({ title, content, pages, groups, currentSlug }) {
   <link rel="apple-touch-icon" href="/assets/inkstead.png">
   <style>
     :root {
-      color-scheme: light;
+      color-scheme: light dark;
       --paper: #fff9ec;
       --paper-strong: #fff1d3;
       --ink: #062748;
       --muted: #5d6470;
       --line: rgba(6, 39, 72, 0.14);
+      --copy: #26384b;
+      --link: #0a5f97;
+      --sidebar-bg: rgba(255, 249, 236, 0.84);
+      --nav-hover: rgba(6, 39, 72, 0.06);
+      --nav-current: linear-gradient(135deg, var(--ink), #0b416f);
+      --nav-current-text: #fff;
+      --mobile-control-bg: rgba(255, 255, 255, 0.52);
+      --inline-code-bg: rgba(255, 255, 255, 0.58);
+      --inline-code-border: rgba(6, 39, 72, 0.12);
+      --pre-bg: #08213a;
+      --pre-text: #fff8e8;
+      --pre-shadow: rgba(6, 39, 72, 0.12);
+      --body-bg:
+        radial-gradient(circle at 80% 8%, rgba(255, 90, 47, 0.16), transparent 30%),
+        radial-gradient(circle at 12% 74%, rgba(95, 201, 181, 0.18), transparent 32%),
+        linear-gradient(135deg, #fffdf7 0%, var(--paper) 52%, #fff5df 100%);
+      --brand-shadow: rgba(6, 39, 72, 0.16);
       --orange: #ff5a2f;
       --gold: #f7b733;
       --mint: #5fc9b5;
       --violet: #6255c7;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #151412;
+        --paper-strong: #211d18;
+        --ink: #f4efe7;
+        --muted: #aaa198;
+        --line: rgba(244, 239, 231, 0.14);
+        --copy: #d9d1c7;
+        --link: #9fd5ff;
+        --sidebar-bg: rgba(21, 20, 18, 0.84);
+        --nav-hover: rgba(244, 239, 231, 0.08);
+        --nav-current: linear-gradient(135deg, #f4efe7, #b9c7ff);
+        --nav-current-text: #12110f;
+        --mobile-control-bg: rgba(255, 255, 255, 0.06);
+        --inline-code-bg: rgba(255, 255, 255, 0.08);
+        --inline-code-border: rgba(244, 239, 231, 0.14);
+        --pre-bg: #090d13;
+        --pre-text: #f8efe1;
+        --pre-shadow: rgba(0, 0, 0, 0.32);
+        --body-bg:
+          radial-gradient(circle at 80% 8%, rgba(255, 90, 47, 0.12), transparent 30%),
+          radial-gradient(circle at 12% 74%, rgba(95, 201, 181, 0.12), transparent 32%),
+          linear-gradient(135deg, #12110f 0%, var(--paper) 52%, #1b1713 100%);
+        --brand-shadow: rgba(0, 0, 0, 0.36);
+      }
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       font: 17px/1.68 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: var(--ink);
-      background:
-        radial-gradient(circle at 80% 8%, rgba(255, 90, 47, 0.16), transparent 30%),
-        radial-gradient(circle at 12% 74%, rgba(95, 201, 181, 0.18), transparent 32%),
-        linear-gradient(135deg, #fffdf7 0%, var(--paper) 52%, #fff5df 100%);
+      background: var(--body-bg);
     }
     .shell {
       display: grid;
@@ -105,7 +145,7 @@ function pageLayout({ title, content, pages, groups, currentSlug }) {
       height: 100vh;
       border-right: 1px solid var(--line);
       padding: 30px 24px;
-      background: rgba(255, 249, 236, 0.84);
+      background: var(--sidebar-bg);
       backdrop-filter: blur(18px);
       display: flex;
       flex-direction: column;
@@ -123,7 +163,7 @@ function pageLayout({ title, content, pages, groups, currentSlug }) {
       width: 56px;
       height: 56px;
       border-radius: 18px;
-      box-shadow: 0 14px 30px rgba(6, 39, 72, 0.16);
+      box-shadow: 0 14px 30px var(--brand-shadow);
     }
     .brand strong {
       display: block;
@@ -155,10 +195,10 @@ function pageLayout({ title, content, pages, groups, currentSlug }) {
       letter-spacing: 0.08em;
       text-transform: uppercase;
     }
-    nav a:hover { background: rgba(6, 39, 72, 0.06); }
+    nav a:hover { background: var(--nav-hover); }
     nav a[aria-current="page"] {
-      color: #fff;
-      background: linear-gradient(135deg, var(--ink), #0b416f);
+      color: var(--nav-current-text);
+      background: var(--nav-current);
       font-weight: 700;
     }
     #docs-nav {
@@ -204,23 +244,23 @@ function pageLayout({ title, content, pages, groups, currentSlug }) {
     }
     h2 { margin-top: 2.4em; font-size: 1.55rem; }
     h3 { margin-top: 1.8em; font-size: 1.16rem; }
-    p, li { color: #26384b; }
-    a { color: #0a5f97; text-decoration-thickness: 0.08em; text-underline-offset: 0.18em; }
+    p, li { color: var(--copy); }
+    a { color: var(--link); text-decoration-thickness: 0.08em; text-underline-offset: 0.18em; }
     code { font: 0.95em ui-monospace, SFMono-Regular, Menlo, monospace; }
     :not(pre) > code {
       padding: 0.12em 0.34em;
-      border: 1px solid rgba(6, 39, 72, 0.12);
+      border: 1px solid var(--inline-code-border);
       border-radius: 5px;
-      background: rgba(255, 255, 255, 0.58);
+      background: var(--inline-code-bg);
     }
     pre {
       overflow-x: auto;
       padding: 18px;
-      border: 1px solid rgba(6, 39, 72, 0.12);
+      border: 1px solid var(--inline-code-border);
       border-radius: 10px;
-      background: #08213a;
-      color: #fff8e8;
-      box-shadow: 0 20px 50px rgba(6, 39, 72, 0.12);
+      background: var(--pre-bg);
+      color: var(--pre-text);
+      box-shadow: 0 20px 50px var(--pre-shadow);
     }
     pre code { color: inherit; }
     blockquote {
@@ -254,7 +294,7 @@ function pageLayout({ title, content, pages, groups, currentSlug }) {
         width: 38px;
         height: 38px;
         border-radius: 12px;
-        box-shadow: 0 10px 24px rgba(6, 39, 72, 0.12);
+        box-shadow: 0 10px 24px var(--brand-shadow);
       }
       .brand strong { font-size: 1.04rem; }
       .brand span span { display: none; }
@@ -269,7 +309,7 @@ function pageLayout({ title, content, pages, groups, currentSlug }) {
         border: 1px solid var(--line);
         border-radius: 8px;
         color: var(--ink);
-        background: rgba(255, 255, 255, 0.52);
+        background: var(--mobile-control-bg);
         font: inherit;
         font-size: 0.92rem;
         font-weight: 800;
@@ -357,14 +397,47 @@ function landingLayout() {
   <link rel="apple-touch-icon" href="/assets/inkstead.png">
   <style>
     :root {
+      color-scheme: light dark;
       --paper: #fff9ec;
       --ink: #062748;
       --muted: #5d6470;
       --line: rgba(6, 39, 72, 0.14);
+      --copy: #26384b;
+      --link: #0a5f97;
+      --hero-bg:
+        linear-gradient(120deg, rgba(255, 90, 47, 0.12), transparent 28%),
+        linear-gradient(300deg, rgba(95, 201, 181, 0.16), transparent 34%),
+        linear-gradient(135deg, #fffdf7 0%, var(--paper) 56%, #fff1d3 100%);
+      --primary-bg: linear-gradient(135deg, var(--ink), #0b416f);
+      --primary-text: #fff;
+      --primary-shadow: rgba(6, 39, 72, 0.18);
+      --secondary-bg: rgba(255, 255, 255, 0.46);
+      --mark-shadow: rgba(6, 39, 72, 0.18);
+      --brand-shadow: rgba(6, 39, 72, 0.12);
       --orange: #ff5a2f;
       --gold: #f7b733;
       --mint: #5fc9b5;
       --violet: #6255c7;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #151412;
+        --ink: #f4efe7;
+        --muted: #aaa198;
+        --line: rgba(244, 239, 231, 0.14);
+        --copy: #d9d1c7;
+        --link: #9fd5ff;
+        --hero-bg:
+          linear-gradient(120deg, rgba(255, 90, 47, 0.11), transparent 28%),
+          linear-gradient(300deg, rgba(95, 201, 181, 0.12), transparent 34%),
+          linear-gradient(135deg, #12110f 0%, var(--paper) 56%, #201a14 100%);
+        --primary-bg: linear-gradient(135deg, #f4efe7, #b9c7ff);
+        --primary-text: #12110f;
+        --primary-shadow: rgba(0, 0, 0, 0.34);
+        --secondary-bg: rgba(255, 255, 255, 0.06);
+        --mark-shadow: rgba(0, 0, 0, 0.38);
+        --brand-shadow: rgba(0, 0, 0, 0.32);
+      }
     }
     * { box-sizing: border-box; }
     body {
@@ -372,10 +445,7 @@ function landingLayout() {
       min-height: 100vh;
       font: 17px/1.65 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: var(--ink);
-      background:
-        linear-gradient(120deg, rgba(255, 90, 47, 0.12), transparent 28%),
-        linear-gradient(300deg, rgba(95, 201, 181, 0.16), transparent 34%),
-        linear-gradient(135deg, #fffdf7 0%, var(--paper) 56%, #fff1d3 100%);
+      background: var(--hero-bg);
     }
     .page { width: min(1120px, calc(100vw - 40px)); margin: 0 auto; }
     header {
@@ -393,7 +463,7 @@ function landingLayout() {
       font-size: 1.18rem;
     }
     .brand-mark { display: none; }
-    a { color: #0a5f97; text-decoration-thickness: 0.08em; text-underline-offset: 0.18em; }
+    a { color: var(--link); text-decoration-thickness: 0.08em; text-underline-offset: 0.18em; }
     .hero {
       display: grid;
       grid-template-columns: minmax(0, 1.05fr) minmax(260px, 0.75fr);
@@ -429,7 +499,7 @@ function landingLayout() {
     .hero p {
       max-width: 56ch;
       margin: 24px 0 0;
-      color: #26384b;
+      color: var(--copy);
       font-size: 1.18rem;
     }
     .actions {
@@ -449,20 +519,20 @@ function landingLayout() {
       text-decoration: none;
     }
     .button.primary {
-      color: #fff;
-      background: linear-gradient(135deg, var(--ink), #0b416f);
-      box-shadow: 0 18px 40px rgba(6, 39, 72, 0.18);
+      color: var(--primary-text);
+      background: var(--primary-bg);
+      box-shadow: 0 18px 40px var(--primary-shadow);
     }
     .button.secondary {
       color: var(--ink);
       border: 1px solid var(--line);
-      background: rgba(255, 255, 255, 0.46);
+      background: var(--secondary-bg);
     }
     .mark {
       justify-self: center;
       width: min(340px, 70vw);
       border-radius: 56px;
-      box-shadow: 0 34px 80px rgba(6, 39, 72, 0.18);
+      box-shadow: 0 34px 80px var(--mark-shadow);
     }
     footer {
       padding: 0 0 34px;
@@ -482,7 +552,7 @@ function landingLayout() {
         width: 38px;
         height: 38px;
         border-radius: 12px;
-        box-shadow: 0 10px 26px rgba(6, 39, 72, 0.12);
+        box-shadow: 0 10px 26px var(--brand-shadow);
       }
       .hero {
         grid-template-columns: 1fr;

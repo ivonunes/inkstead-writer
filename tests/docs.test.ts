@@ -30,4 +30,15 @@ describe("docs", () => {
     }
     expect(missing).toEqual([]);
   });
+
+  it("keeps dark mode support in public style surfaces", async () => {
+    const root = process.cwd();
+    const docsBuilder = await fs.readFile(path.join(root, "scripts/build-docs.mjs"), "utf8");
+    const defaultLayout = await fs.readFile(path.join(root, "src/core/templates/defaults/layout.liquid"), "utf8");
+    const writerCss = await fs.readFile(path.join(root, "src/writer/app/styles/writer.css"), "utf8");
+    for (const source of [docsBuilder, defaultLayout, writerCss]) {
+      expect(source).toContain("color-scheme: light dark");
+      expect(source).toContain("@media (prefers-color-scheme: dark)");
+    }
+  });
 });

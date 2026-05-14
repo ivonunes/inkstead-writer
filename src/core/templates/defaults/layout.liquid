@@ -14,14 +14,31 @@
   {% for social in site.social %}{% if social.relMe or social.url contains "http" %}<link rel="me" href="{{ social.url }}">{% endif %}{% endfor %}
   <style>
     :root {
-      color-scheme: light;
+      color-scheme: light dark;
       --background: #fffdf9;
       --surface: #fff;
       --text: #232323;
       --muted: #746f67;
       --line: #e7ded1;
       --accent: #2f4da3;
+      --accent-hover: #142b78;
       --accent-soft: #f2f4ff;
+      --summary: #3f3f3f;
+      --pagination-hover-line: #cfd8ff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --background: #12110f;
+        --surface: #1b1916;
+        --text: #f2eee7;
+        --muted: #aaa198;
+        --line: #343029;
+        --accent: #9ab0ff;
+        --accent-hover: #d7defd;
+        --accent-soft: rgba(154, 176, 255, 0.14);
+        --summary: #d7d0c7;
+        --pagination-hover-line: rgba(154, 176, 255, 0.36);
+      }
     }
     * { box-sizing: border-box; }
     body {
@@ -69,7 +86,7 @@
       text-decoration-thickness: 0.08em;
       text-underline-offset: 0.18em;
     }
-    a:hover { color: #142b78; }
+    a:hover { color: var(--accent-hover); }
     img {
       max-width: 100%;
       height: auto;
@@ -131,7 +148,7 @@
       text-decoration: none;
     }
     .pagination a:hover {
-      border-color: #cfd8ff;
+      border-color: var(--pagination-hover-line);
       background: var(--accent-soft);
       color: var(--accent);
     }
@@ -182,7 +199,7 @@
     .note-card .post-meta { margin-top: 16px; }
     .p-summary {
       margin-top: 16px;
-      color: #3f3f3f;
+      color: var(--summary);
     }
     .p-summary > :first-child { margin-top: 0; }
     .p-summary > :last-child { margin-bottom: 0; }

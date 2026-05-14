@@ -1,5 +1,5 @@
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
   --bg: #fffdf9;
   --panel: #fff;
   --text: #232323;
@@ -17,6 +17,100 @@
   --glass-line: rgba(47, 77, 163, 0.2);
   --glass-shadow: rgba(6, 39, 72, 0.13);
   --danger: #9b2c2c;
+  --connect-logo-shadow: rgba(6, 39, 72, 0.16);
+  --button-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.46)),
+    linear-gradient(135deg, rgba(47, 77, 163, 0.12), rgba(247, 183, 51, 0.08));
+  --button-hover-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.58)),
+    linear-gradient(135deg, rgba(47, 77, 163, 0.16), rgba(247, 183, 51, 0.11));
+  --button-danger-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.44)),
+    linear-gradient(135deg, rgba(155, 44, 44, 0.12), rgba(247, 183, 51, 0.06));
+  --button-danger-border: rgba(155, 44, 44, 0.22);
+  --button-hover-border: rgba(47, 77, 163, 0.32);
+  --button-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    inset 0 -10px 18px rgba(47, 77, 163, 0.06),
+    0 10px 26px var(--glass-shadow);
+  --button-hover-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    inset 0 -10px 18px rgba(47, 77, 163, 0.08),
+    0 12px 30px rgba(6, 39, 72, 0.16);
+  --button-active-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    inset 0 8px 18px rgba(6, 39, 72, 0.08),
+    0 6px 16px rgba(6, 39, 72, 0.12);
+  --modal-backdrop: rgba(6, 39, 72, 0.18);
+  --writer-fade-solid: rgba(255, 253, 249, 0.98);
+  --writer-fade-strong: rgba(255, 253, 249, 0.82);
+  --writer-fade-soft: rgba(255, 253, 249, 0.34);
+  --writer-fade-transparent: rgba(255, 253, 249, 0);
+  --editor-bar-bg: rgba(255, 253, 249, 0.74);
+  --target-chip-bg: rgba(255, 255, 255, 0.54);
+  --target-chip-border: rgba(47, 77, 163, 0.18);
+  --toast-bg: rgba(255, 255, 255, 0.8);
+  --toast-border: rgba(47, 77, 163, 0.18);
+  --spinner-track: rgba(47, 77, 163, 0.22);
+  --skeleton-glow: rgba(47, 77, 163, 0.07);
+  --skeleton-line: rgba(35, 35, 35, 0.1);
+  --skeleton-subline: rgba(116, 111, 103, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12110f;
+    --panel: #1b1916;
+    --text: #f2eee7;
+    --muted: #aaa198;
+    --line: #343029;
+    --accent: #9ab0ff;
+    --accent-hover: #d7defd;
+    --accent-soft: rgba(154, 176, 255, 0.14);
+    --glass: rgba(28, 26, 23, 0.58);
+    --glass-strong: rgba(31, 29, 25, 0.78);
+    --glass-line: rgba(154, 176, 255, 0.28);
+    --glass-shadow: rgba(0, 0, 0, 0.34);
+    --danger: #ff9b9b;
+    --connect-logo-shadow: rgba(0, 0, 0, 0.34);
+    --button-bg:
+      linear-gradient(180deg, rgba(46, 43, 38, 0.86), rgba(24, 23, 21, 0.54)),
+      linear-gradient(135deg, rgba(154, 176, 255, 0.18), rgba(247, 183, 51, 0.08));
+    --button-hover-bg:
+      linear-gradient(180deg, rgba(58, 54, 48, 0.9), rgba(32, 30, 27, 0.62)),
+      linear-gradient(135deg, rgba(154, 176, 255, 0.22), rgba(247, 183, 51, 0.1));
+    --button-danger-bg:
+      linear-gradient(180deg, rgba(52, 39, 37, 0.86), rgba(28, 22, 21, 0.54)),
+      linear-gradient(135deg, rgba(255, 155, 155, 0.16), rgba(247, 183, 51, 0.06));
+    --button-danger-border: rgba(255, 155, 155, 0.3);
+    --button-hover-border: rgba(154, 176, 255, 0.38);
+    --button-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      inset 0 -10px 18px rgba(154, 176, 255, 0.06),
+      0 10px 26px var(--glass-shadow);
+    --button-hover-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      inset 0 -10px 18px rgba(154, 176, 255, 0.08),
+      0 12px 30px rgba(0, 0, 0, 0.36);
+    --button-active-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      inset 0 8px 18px rgba(0, 0, 0, 0.28),
+      0 6px 16px rgba(0, 0, 0, 0.28);
+    --modal-backdrop: rgba(0, 0, 0, 0.42);
+    --writer-fade-solid: rgba(18, 17, 15, 0.98);
+    --writer-fade-strong: rgba(18, 17, 15, 0.82);
+    --writer-fade-soft: rgba(18, 17, 15, 0.34);
+    --writer-fade-transparent: rgba(18, 17, 15, 0);
+    --editor-bar-bg: rgba(18, 17, 15, 0.76);
+    --target-chip-bg: rgba(255, 255, 255, 0.06);
+    --target-chip-border: rgba(154, 176, 255, 0.24);
+    --toast-bg: rgba(28, 26, 23, 0.86);
+    --toast-border: rgba(154, 176, 255, 0.26);
+    --spinner-track: rgba(154, 176, 255, 0.22);
+    --skeleton-glow: rgba(154, 176, 255, 0.1);
+    --skeleton-line: rgba(242, 238, 231, 0.12);
+    --skeleton-subline: rgba(170, 161, 152, 0.14);
+  }
 }
 
 * {
@@ -138,7 +232,7 @@ textarea {
   height: 128px;
   margin: 0 0 64px;
   border-radius: 22px;
-  box-shadow: 0 18px 38px rgba(6, 39, 72, 0.16);
+  box-shadow: 0 18px 38px var(--connect-logo-shadow);
 }
 
 .connect-actions {
@@ -223,16 +317,11 @@ h1 {
   min-height: 38px;
   border: 1px solid var(--glass-line);
   border-radius: 999px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.46)),
-    linear-gradient(135deg, rgba(47, 77, 163, 0.12), rgba(247, 183, 51, 0.08));
+  background: var(--button-bg);
   color: var(--accent-hover);
   padding: 8px 14px;
   cursor: pointer;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.72),
-    inset 0 -10px 18px rgba(47, 77, 163, 0.06),
-    0 10px 26px var(--glass-shadow);
+  box-shadow: var(--button-shadow);
   backdrop-filter: blur(18px) saturate(1.35);
   -webkit-backdrop-filter: blur(18px) saturate(1.35);
   transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
@@ -250,23 +339,15 @@ h1 {
 }
 
 .button:hover {
-  border-color: rgba(47, 77, 163, 0.32);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.58)),
-    linear-gradient(135deg, rgba(47, 77, 163, 0.16), rgba(247, 183, 51, 0.11));
+  border-color: var(--button-hover-border);
+  background: var(--button-hover-bg);
   color: var(--accent);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.82),
-    inset 0 -10px 18px rgba(47, 77, 163, 0.08),
-    0 12px 30px rgba(6, 39, 72, 0.16);
+  box-shadow: var(--button-hover-shadow);
 }
 
 .button:active {
   transform: scale(0.975);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.62),
-    inset 0 8px 18px rgba(6, 39, 72, 0.08),
-    0 6px 16px rgba(6, 39, 72, 0.12);
+  box-shadow: var(--button-active-shadow);
 }
 
 .button:disabled {
@@ -280,10 +361,8 @@ h1 {
 
 .button.danger {
   color: var(--danger);
-  border-color: rgba(155, 44, 44, 0.22);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.44)),
-    linear-gradient(135deg, rgba(155, 44, 44, 0.12), rgba(247, 183, 51, 0.06));
+  border-color: var(--button-danger-border);
+  background: var(--button-danger-bg);
 }
 
 .hidden-file-input {
@@ -297,7 +376,7 @@ h1 {
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgba(6, 39, 72, 0.18);
+  background: var(--modal-backdrop);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
@@ -381,10 +460,10 @@ h1 {
   background: linear-gradient(
     180deg,
     var(--bg) 0%,
-    rgba(255, 253, 249, 0.98) 42%,
-    rgba(255, 253, 249, 0.82) 58%,
-    rgba(255, 253, 249, 0.34) 82%,
-    rgba(255, 253, 249, 0) 100%
+    var(--writer-fade-solid) 42%,
+    var(--writer-fade-strong) 58%,
+    var(--writer-fade-soft) 82%,
+    var(--writer-fade-transparent) 100%
   );
   transition: opacity 180ms ease;
 }
@@ -479,8 +558,8 @@ h1 {
   height: 66px;
   border-bottom: 1px solid var(--line);
   background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(47, 77, 163, 0.07), rgba(255, 255, 255, 0)) 0 0 / 180% 100%,
-    linear-gradient(180deg, rgba(35, 35, 35, 0.1) 18px, transparent 18px 28px, rgba(116, 111, 103, 0.12) 28px, transparent 29px);
+    linear-gradient(90deg, transparent, var(--skeleton-glow), transparent) 0 0 / 180% 100%,
+    linear-gradient(180deg, var(--skeleton-line) 18px, transparent 18px 28px, var(--skeleton-subline) 28px, transparent 29px);
   animation: skeleton-shimmer 1200ms ease-in-out infinite;
 }
 
@@ -541,9 +620,9 @@ h1 {
 
 .editor-bar {
   min-height: 56px;
-  border-bottom: 1px solid rgba(231, 222, 209, 0.72);
+  border-bottom: 1px solid var(--line);
   padding: max(10px, env(safe-area-inset-top)) clamp(18px, 4vw, 42px) 10px;
-  background: rgba(255, 253, 249, 0.74);
+  background: var(--editor-bar-bg);
   backdrop-filter: blur(20px) saturate(1.28);
   -webkit-backdrop-filter: blur(20px) saturate(1.28);
 }
@@ -582,10 +661,10 @@ h1 {
   gap: 7px;
   min-height: 32px;
   padding: 6px 10px;
-  border: 1px solid rgba(47, 77, 163, 0.18);
+  border: 1px solid var(--target-chip-border);
   border-radius: 999px;
   color: var(--accent-hover);
-  background: rgba(255, 255, 255, 0.54);
+  background: var(--target-chip-bg);
   text-transform: capitalize;
 }
 
@@ -647,9 +726,9 @@ h1 {
   z-index: 30;
   max-width: min(420px, calc(100vw - 36px));
   padding: 11px 14px;
-  border: 1px solid rgba(47, 77, 163, 0.18);
+  border: 1px solid var(--toast-border);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--toast-bg);
   color: var(--accent-hover);
   box-shadow: 0 12px 30px var(--glass-shadow);
   backdrop-filter: blur(18px) saturate(1.25);
@@ -678,7 +757,7 @@ h1 {
 }
 
 .toast-success {
-  border-color: rgba(95, 201, 181, 0.36);
+  border-color: rgba(95, 201, 181, 0.4);
 }
 
 .toast-error {
@@ -689,7 +768,7 @@ h1 {
 .spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(47, 77, 163, 0.22);
+  border: 2px solid var(--spinner-track);
   border-top-color: var(--accent);
   border-radius: 999px;
   animation: spin 850ms linear infinite;
