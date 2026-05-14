@@ -6,6 +6,29 @@ const root = process.cwd();
 const docsDir = path.join(root, "docs");
 const outDir = path.join(root, "docs-site");
 const md = new MarkdownIt({ html: true, linkify: true, typographer: true });
+const terminalLanguages = new Set(["bash", "sh", "shell", "zsh"]);
+const languageLabels = {
+  bash: "Terminal",
+  sh: "Terminal",
+  shell: "Terminal",
+  zsh: "Terminal",
+  ts: "TypeScript",
+  js: "JavaScript",
+  md: "Markdown",
+  markdown: "Markdown",
+  yaml: "YAML",
+  yml: "YAML",
+  liquid: "Liquid",
+  env: ".env",
+  txt: "Text",
+  text: "Text"
+};
+
+md.renderer.rules.fence = (tokens, index) => {
+  const token = tokens[index];
+  const language = token.info.trim().split(/\s+/)[0]?.toLowerCase() || "text";
+  return terminalLanguages.has(language) ? renderTerminalBlock(token.content, language) : renderCodeBlock(token.content, language);
+};
 
 const navGroups = [
   {
@@ -60,6 +83,93 @@ function labelFromSlug(slug) {
   return slug.split("-").map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`).join(" ");
 }
 
+function renderTerminalBlock(code, language) {
+  const lines = code.replace(/\n$/, "").split("\n");
+  const body = lines.map((line) => `<span class="terminal-line"><span class="terminal-prompt">$</span><span>${escapeHtml(line)}</span></span>`).join("");
+  return `<figure class="code-block terminal-block" data-language="${escapeHtml(language)}">
+    <figcaption><span class="window-dots" aria-hidden="true"><span></span><span></span><span></span></span><span>${languageLabels[language] ?? "Terminal"}</span></figcaption>
+    <pre><code>${body}</code></pre>
+  </figure>`;
+}
+
+function renderCodeBlock(code, language) {
+  const label = languageLabels[language] ?? language.toUpperCase();
+  return `<figure class="code-block source-block" data-language="${escapeHtml(language)}">
+    <figcaption><span>${escapeHtml(label)}</span></figcaption>
+    <pre><code class="language-${escapeHtml(language)}">${highlightCode(code.replace(/\n$/, ""), language)}</code></pre>
+  </figure>`;
+}
+
+function highlightCode(code, language) {
+  if (["ts", "js"].includes(language)) return code.split("\n").map(highlightTypeScriptLine).join("\n");
+  if (["yaml", "yml", "env"].includes(language)) return code.split("\n").map(highlightKeyValueLine).join("\n");
+  if (["md", "markdown"].includes(language)) return code.split("\n").map(highlightMarkdownLine).join("\n");
+  if (language === "liquid") return escapeHtml(code)
+    .replace(/({[{%][\s\S]*?[}%]})/g, '<span class="syntax-template">$1</span>')
+    .replace(/(&lt;\/?[\w-]+(?:\s[^&]*)?&gt;)/g, '<span class="syntax-tag">$1</span>');
+  return escapeHtml(code);
+}
+
+function highlightTypeScriptLine(line) {
+  let output = "";
+  let index = 0;
+  while (index < line.length) {
+    if (line.startsWith("//", index)) {
+      output += `<span class="syntax-comment">${escapeHtml(line.slice(index))}</span>`;
+      break;
+    }
+    const char = line[index];
+    if (char === '"' || char === "'" || char === "`") {
+      const end = readQuotedString(line, index, char);
+      output += `<span class="syntax-string">${escapeHtml(line.slice(index, end))}</span>`;
+      index = end;
+      continue;
+    }
+    let next = index + 1;
+    while (next < line.length && !line.startsWith("//", next) && !['"', "'", "`"].includes(line[next])) next += 1;
+    output += highlightTypeScriptText(line.slice(index, next));
+    index = next;
+  }
+  return output;
+}
+
+function readQuotedString(line, start, quote) {
+  let index = start + 1;
+  while (index < line.length) {
+    if (line[index] === "\\") {
+      index += 2;
+      continue;
+    }
+    if (line[index] === quote) return index + 1;
+    index += 1;
+  }
+  return line.length;
+}
+
+function highlightTypeScriptText(text) {
+  return escapeHtml(text)
+    .replace(/\b(import|from|export|default|const|let|return|true|false|new|await|async|type|string|number|boolean)\b/g, '<span class="syntax-keyword">$1</span>')
+    .replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="syntax-number">$1</span>')
+    .replace(/\b([A-Za-z_$][\w$]*)(?=\s*:)/g, '<span class="syntax-property">$1</span>');
+}
+
+function highlightKeyValueLine(line) {
+  const escaped = escapeHtml(line);
+  if (/^\s*#/.test(line)) return `<span class="syntax-comment">${escaped}</span>`;
+  return escaped
+    .replace(/^(\s*[-]?\s*)([A-Za-z0-9_.-]+)(\s*:)/, '$1<span class="syntax-property">$2</span>$3')
+    .replace(/^(\s*)([A-Z0-9_]+)(=)/, '$1<span class="syntax-property">$2</span>$3')
+    .replace(/(&quot;.*?&quot;|'.*?')/g, '<span class="syntax-string">$1</span>');
+}
+
+function highlightMarkdownLine(line) {
+  const escaped = escapeHtml(line);
+  if (/^\s*---\s*$/.test(line)) return `<span class="syntax-comment">${escaped}</span>`;
+  if (/^\s*#/.test(line)) return `<span class="syntax-keyword">${escaped}</span>`;
+  if (/^\s*[A-Za-z0-9_.-]+:/.test(line)) return escaped.replace(/^(\s*)([A-Za-z0-9_.-]+)(:)/, '$1<span class="syntax-property">$2</span>$3');
+  return escaped.replace(/(\*\*[^*]+\*\*|_[^_]+_|`[^`]+`)/g, '<span class="syntax-string">$1</span>');
+}
+
 function pageLayout({ title, content, pages, groups, currentSlug }) {
   const nav = groups.map((group) => `<div class="nav-group"><p>${escapeHtml(group.title)}</p>${group.pages.map((page) => `<a ${page.slug === currentSlug ? 'aria-current="page"' : ""} href="/${page.slug}/">${escapeHtml(page.title)}</a>`).join("")}</div>`).join("");
   return `<!doctype html>
@@ -90,6 +200,16 @@ function pageLayout({ title, content, pages, groups, currentSlug }) {
       --pre-bg: #08213a;
       --pre-text: #fff8e8;
       --pre-shadow: rgba(6, 39, 72, 0.12);
+      --pre-header: rgba(255, 255, 255, 0.08);
+      --pre-border: rgba(255, 255, 255, 0.12);
+      --terminal-prompt: #5fc9b5;
+      --syntax-comment: #9fb0bf;
+      --syntax-keyword: #ffb86b;
+      --syntax-string: #b9f0d8;
+      --syntax-number: #f7b733;
+      --syntax-property: #9fd5ff;
+      --syntax-tag: #ff9f8b;
+      --syntax-template: #d6c9ff;
       --body-bg:
         radial-gradient(circle at 80% 8%, rgba(255, 90, 47, 0.16), transparent 30%),
         radial-gradient(circle at 12% 74%, rgba(95, 201, 181, 0.18), transparent 32%),
@@ -119,6 +239,16 @@ function pageLayout({ title, content, pages, groups, currentSlug }) {
         --pre-bg: #090d13;
         --pre-text: #f8efe1;
         --pre-shadow: rgba(0, 0, 0, 0.32);
+        --pre-header: rgba(255, 255, 255, 0.07);
+        --pre-border: rgba(255, 255, 255, 0.11);
+        --terminal-prompt: #5fc9b5;
+        --syntax-comment: #758594;
+        --syntax-keyword: #f7b733;
+        --syntax-string: #9fe3c9;
+        --syntax-number: #ffd27a;
+        --syntax-property: #9fd5ff;
+        --syntax-tag: #ff9f8b;
+        --syntax-template: #c9bcff;
         --body-bg:
           radial-gradient(circle at 80% 8%, rgba(255, 90, 47, 0.12), transparent 30%),
           radial-gradient(circle at 12% 74%, rgba(95, 201, 181, 0.12), transparent 32%),
@@ -263,6 +393,66 @@ function pageLayout({ title, content, pages, groups, currentSlug }) {
       box-shadow: 0 20px 50px var(--pre-shadow);
     }
     pre code { color: inherit; }
+    .code-block {
+      overflow: hidden;
+      margin: 28px 0;
+      border: 1px solid var(--pre-border);
+      border-radius: 12px;
+      background: var(--pre-bg);
+      color: var(--pre-text);
+      box-shadow: 0 20px 50px var(--pre-shadow);
+    }
+    .code-block figcaption {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 38px;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--pre-border);
+      background: var(--pre-header);
+      color: rgba(255, 248, 232, 0.76);
+      font: 0.78rem ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: 0.02em;
+    }
+    .code-block pre {
+      margin: 0;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+    .window-dots {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .window-dots span {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    .window-dots span:nth-child(1) { background: var(--orange); }
+    .window-dots span:nth-child(2) { background: var(--gold); }
+    .window-dots span:nth-child(3) { background: var(--mint); }
+    .terminal-block figcaption > span:last-child {
+      margin-left: auto;
+    }
+    .terminal-line {
+      display: grid;
+      grid-template-columns: 1.4em minmax(0, 1fr);
+      gap: 0.6em;
+      min-width: max-content;
+    }
+    .terminal-prompt {
+      color: var(--terminal-prompt);
+      user-select: none;
+    }
+    .syntax-comment { color: var(--syntax-comment); }
+    .syntax-keyword { color: var(--syntax-keyword); }
+    .syntax-string { color: var(--syntax-string); }
+    .syntax-number { color: var(--syntax-number); }
+    .syntax-property { color: var(--syntax-property); }
+    .syntax-tag { color: var(--syntax-tag); }
+    .syntax-template { color: var(--syntax-template); }
     blockquote {
       margin-left: 0;
       padding-left: 18px;

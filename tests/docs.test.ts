@@ -41,4 +41,12 @@ describe("docs", () => {
       expect(source).toContain("@media (prefers-color-scheme: dark)");
     }
   });
+
+  it("renders docs command and code fences with enhanced blocks", async () => {
+    const docsBuilder = await fs.readFile(path.join(process.cwd(), "scripts/build-docs.mjs"), "utf8");
+    expect(docsBuilder).toContain("terminal-block");
+    expect(docsBuilder).toContain("source-block");
+    expect(docsBuilder).toContain("syntax-keyword");
+    expect(docsBuilder).toContain("window-dots");
+  });
 });
