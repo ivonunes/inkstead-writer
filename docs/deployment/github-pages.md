@@ -33,3 +33,5 @@ If syndication is enabled, the workflow publishes the site first, then syndicate
 ## Variables
 
 GitHub Pages itself does not need deployment secrets. If you use syndication, add the provider variables from `.env.example` as GitHub Actions secrets.
+
+Run `npm run doctor` locally if you want to check content, config, and any syndication variables before pushing.

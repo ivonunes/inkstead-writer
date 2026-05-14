@@ -27,7 +27,8 @@ const languageLabels = {
 md.renderer.rules.fence = (tokens, index) => {
   const token = tokens[index];
   const language = token.info.trim().split(/\s+/)[0]?.toLowerCase() || "text";
-  return terminalLanguages.has(language) ? renderTerminalBlock(token.content, language) : renderCodeBlock(token.content, language);
+  if (terminalLanguages.has(language)) return renderTerminalBlock(token.content, language);
+  return renderCodeBlock(token.content, language);
 };
 
 const navGroups = [
@@ -94,10 +95,21 @@ function renderTerminalBlock(code, language) {
 
 function renderCodeBlock(code, language) {
   const label = languageLabels[language] ?? language.toUpperCase();
-  return `<figure class="code-block source-block" data-language="${escapeHtml(language)}">
-    <figcaption><span>${escapeHtml(label)}</span></figcaption>
+  const isPathList = isPathListBlock(code, language);
+  const caption = isPathList ? "" : `\n    <figcaption><span>${escapeHtml(label)}</span></figcaption>`;
+  return `<figure class="code-block source-block${isPathList ? " path-list-block" : ""}" data-language="${escapeHtml(language)}">${caption}
     <pre><code class="language-${escapeHtml(language)}">${highlightCode(code.replace(/\n$/, ""), language)}</code></pre>
   </figure>`;
+}
+
+function isPathListBlock(code, language) {
+  if (!["txt", "text"].includes(language)) return false;
+  const lines = code.trim().split("\n").map((line) => line.trim()).filter(Boolean);
+  return lines.length > 0 && lines.every((line) => {
+    if (line.startsWith("/") || /^https?:\/\//.test(line)) return false;
+    if (/\s/.test(line)) return false;
+    return line.includes("/") || line.includes(".");
+  });
 }
 
 function highlightCode(code, language) {

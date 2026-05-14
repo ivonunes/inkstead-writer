@@ -6,6 +6,22 @@ Choose a deployment target during `npx inkstead init`, or change it later in `si
 
 Some deployment adapters require a matching CI adapter. Inkstead validates adapter combinations when it loads `site.config.ts`.
 
+## Before Publishing
+
+When you are ready to publish, check the deployment requirements:
+
+```bash
+npm run doctor
+```
+
+If `doctor` reports missing environment variables and you want to publish from your own machine, create a local `.env` file:
+
+```bash
+cp .env.example .env
+```
+
+Fill in the required values in `.env`, then run `npm run doctor` again. If you publish through CI, add the same names from `.env.example` as secrets or variables in your CI provider instead.
+
 Adapter guides:
 
 - [Cloudflare Workers](./cloudflare-workers/)

@@ -98,6 +98,19 @@ export default defineConfig(${JSON.stringify(config, null, 2)});
     await writeFileEnsured(path.join(root, file), content);
   }
 
+  const setupSecrets = envNames.length > 0 ? `
+3. Add publishing secrets when you are ready to publish
+   cp .env.example .env
+
+4. Fill in the required values in .env.
+
+5. For CI publishing, add the same values as secrets or variables.
+
+6. Check your setup before publishing
+   npm run doctor` : `
+3. Check your setup before publishing
+   npm run doctor`;
+
   return `Your Inkstead site has been created.
 
 Next steps:
@@ -106,16 +119,7 @@ Next steps:
    cd ${path.basename(root)}
    npm install
 
-2. Add local secrets
-   cp .env.example .env
-
-3. Fill in the required values in .env.
-
-4. For CI publishing, add the same values as secrets or variables.
-
-5. Check your setup
-   npm run doctor
-
-6. Preview locally
-   npm run dev`;
+2. Preview locally
+   npm run dev
+${setupSecrets}`;
 }

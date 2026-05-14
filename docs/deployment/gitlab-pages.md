@@ -26,6 +26,8 @@ If syndication is enabled, the pipeline publishes the site first, then syndicate
 
 GitLab Pages itself does not need deployment secrets. If you use syndication, add the provider variables from `.env.example` as GitLab CI/CD variables.
 
+Run `npm run doctor` locally if you want to check content, config, and any syndication variables before pushing.
+
 ## Build Output
 
 By default, Inkstead builds to `dist`, and the GitLab Pages workflow publishes `dist`. If you change `build.output`, regenerate or update `.gitlab-ci.yml` so the Pages `publish` path matches.

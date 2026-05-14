@@ -6,8 +6,6 @@ Inkstead turns a folder of Markdown files into a personal website. The quickest 
 npx inkstead init my-site
 cd my-site
 npm install
-cp .env.example .env
-npm run doctor
 npm run dev
 ```
 
@@ -57,3 +55,5 @@ npm run publish
 `publish` builds the site, deploys it, syndicates any posts that ask to be syndicated, then updates the site again if new syndication links were added.
 
 Before publishing, fill in `.env` for local publishing. If you chose automated publishing, add the same values as CI secrets or variables.
+
+Run `npm run doctor` before publishing to check your config, content, deployment setup, and required environment variables.

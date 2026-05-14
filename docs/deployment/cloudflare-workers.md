@@ -20,6 +20,8 @@ Change `projectName` to the Worker name you want to deploy.
 
 For local publishing, put those values in `.env`. For automated publishing, add them as CI secrets or variables.
 
+Run `npm run doctor` before the first publish to confirm the Cloudflare variables are available.
+
 ## Publish
 
 ```bash
