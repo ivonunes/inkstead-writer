@@ -18,3 +18,4 @@ Adapter guides:
 
 - [GitHub Actions](/github-actions/)
 - [GitLab CI](/gitlab-ci/)
+- [Forgejo Actions](/forgejo-actions/)

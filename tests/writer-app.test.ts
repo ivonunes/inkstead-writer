@@ -73,7 +73,7 @@ describe("writer app", () => {
     }, () => {
       expect(localDraftIdentifier(undefined)).toBe("__new__");
       const key = localDraftKey(remoteConfig, "content/posts/post.md");
-      expect(key).toContain("github:me:site:main:content/posts:content/posts/post.md");
+      expect(key).toContain("github::me:site:main:content/posts:content/posts/post.md");
       saveLocalWriterDraft(remoteConfig, "content/posts/post.md", {
         title: "Draft",
         body: "Body",

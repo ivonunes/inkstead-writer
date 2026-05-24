@@ -6,10 +6,11 @@ import { deployProviders } from "./adapters/registry.js";
 export async function deploySite(root: string, config: InksteadConfig): Promise<void> {
   dotenv.config({ path: path.join(root, ".env") });
   if (!config.deploy) throw new Error("No deployment provider is configured.");
+  const projectName = "projectName" in config.deploy ? config.deploy.projectName : undefined;
   await deployProviders[config.deploy.provider].deploy({
     root,
     distDir: path.join(root, config.build?.output ?? "dist"),
-    projectName: config.deploy.projectName,
+    projectName,
     env: process.env
   });
 }

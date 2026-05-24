@@ -72,6 +72,48 @@ describe("init", () => {
     expect(workflow).toContain("npm run publish");
   });
 
+  it("can scaffold Netlify deployment", async () => {
+    const site = path.join(fixture.tempRoot, "site");
+    await initSite(site, { ci: "github-actions", deploy: "netlify", syndication: [] });
+    const config = await fs.readFile(path.join(site, "site.config.ts"), "utf8");
+    const envExample = await fs.readFile(path.join(site, ".env.example"), "utf8");
+    const workflow = await fs.readFile(path.join(site, ".github/workflows/publish.yml"), "utf8");
+    expect(config).toContain('"provider": "netlify"');
+    expect(config).not.toContain('"projectName"');
+    expect(envExample).toContain("NETLIFY_SITE_ID=");
+    expect(envExample).toContain("NETLIFY_AUTH_TOKEN=");
+    expect(workflow).toContain("NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}");
+    expect(workflow).toContain("NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}");
+  });
+
+  it("can scaffold Forgejo Actions and Forgejo Writer settings", async () => {
+    const site = path.join(fixture.tempRoot, "site");
+    await initSite(site, {
+      ci: "forgejo-actions",
+      deploy: "cloudflare-workers",
+      deployProjectName: "my-site",
+      syndication: [],
+      writer: {
+        enabled: true,
+        provider: "forgejo",
+        instanceUrl: "https://codeberg.org",
+        owner: "ivonunes",
+        repo: "my-site",
+        branch: "main"
+      }
+    });
+    const config = await fs.readFile(path.join(site, "site.config.ts"), "utf8");
+    const workflow = await fs.readFile(path.join(site, ".forgejo/workflows/publish.yml"), "utf8");
+    await expect(fs.stat(path.join(site, ".github/workflows/publish.yml"))).rejects.toThrow();
+    await expect(fs.stat(path.join(site, ".gitlab-ci.yml"))).rejects.toThrow();
+    expect(config).toContain('"provider": "forgejo-actions"');
+    expect(config).toContain('"provider": "forgejo"');
+    expect(config).toContain('"instanceUrl": "https://codeberg.org"');
+    expect(workflow).toContain("runs-on: docker");
+    expect(workflow).toContain("image: node:22");
+    expect(workflow).toContain("npm run publish");
+  });
+
   it("scaffolds a GitLab Pages pipeline when GitLab Pages is selected", async () => {
     const site = path.join(fixture.tempRoot, "site");
     await initSite(site, { ci: "github-actions", deploy: "gitlab-pages", syndication: ["mastodon"] });

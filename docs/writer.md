@@ -57,9 +57,10 @@ Writer supports:
 
 - `github`
 - `gitlab`
+- `forgejo`
 - `local`
 
-Use `github` or `gitlab` for published sites. Use a fine-grained personal access token that is limited to the target repository and has repository contents read/write permissions.
+Use `github`, `gitlab`, or `forgejo` for published sites. Use a personal access token that is limited to the target repository and has repository contents read/write permissions.
 
 For GitLab, `owner` may include nested groups:
 
@@ -74,6 +75,20 @@ writer: {
 }
 ```
 
+For Forgejo, set `instanceUrl` to the base URL of your Forgejo instance:
+
+```ts
+writer: {
+  enabled: true,
+  path: "/writer",
+  provider: "forgejo",
+  instanceUrl: "https://codeberg.org",
+  owner: "example-user",
+  repo: "example-site",
+  branch: "main"
+}
+```
+
 ## Local Development
 
 When you run:
@@ -82,7 +97,7 @@ When you run:
 npm run dev
 ```
 
-Inkstead automatically uses the local filesystem provider for Writer if Writer is enabled. This happens even if your config is set to `github` or `gitlab`.
+Inkstead automatically uses the local filesystem provider for Writer if Writer is enabled. This happens even if your config is set to `github`, `gitlab`, or `forgejo`.
 
 In local mode, Writer does not ask for a token. It writes directly to your working copy through the Inkstead dev server. The local API is only available from the dev server and only writes inside the configured post and media directories.
 

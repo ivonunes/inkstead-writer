@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildPostMarkdown } from "../src/writer/app/core/posts.js";
+import { ForgejoRepositoryAdapter } from "../src/writer/app/adapters/forgejo.js";
 import { GitHubRepositoryAdapter } from "../src/writer/app/adapters/github.js";
 import { GitLabRepositoryAdapter } from "../src/writer/app/adapters/gitlab.js";
 
@@ -32,6 +33,34 @@ describe("writer adapters", () => {
       expect(requests[0].url).toContain("path=content%2Fposts");
       expect(requests[0].url).toContain("ref=main");
       expect(requests[0].token).toBe("pat");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("supports Forgejo Writer config and validates through the Forgejo API", async () => {
+    const requests: Array<{ url: string; authorization: string | null }> = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      requests.push({ url, authorization: new Headers(init?.headers).get("Authorization") });
+      if (url.includes("/contents/content/posts?")) return new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+      return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+    };
+
+    try {
+      const adapter = new ForgejoRepositoryAdapter({
+        provider: "forgejo",
+        instanceUrl: "https://codeberg.org/",
+        owner: "me",
+        repo: "site",
+        branch: "main",
+        postsPath: "content/posts",
+        mediaPath: "content/media"
+      }, "pat");
+      await adapter.validateConnection();
+      expect(requests[0].url).toBe("https://codeberg.org/api/v1/repos/me/site/contents/content/posts?ref=main");
+      expect(requests[0].authorization).toBe("token pat");
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -70,6 +99,26 @@ describe("writer adapters", () => {
         mediaPath: "content/media"
       }, "pat");
       await expect(adapter.validateConnection()).rejects.toThrow("GitLab rejected the token or the token is missing repository read/write permissions.");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("surfaces Forgejo token permission failures during validation", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response(JSON.stringify({ message: "forbidden" }), { status: 403, headers: { "content-type": "application/json" } });
+
+    try {
+      const adapter = new ForgejoRepositoryAdapter({
+        provider: "forgejo",
+        instanceUrl: "https://codeberg.org",
+        owner: "me",
+        repo: "site",
+        branch: "main",
+        postsPath: "content/posts",
+        mediaPath: "content/media"
+      }, "pat");
+      await expect(adapter.validateConnection()).rejects.toThrow("Forgejo rejected the token or the token is missing write:repository permission.");
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -508,6 +557,92 @@ describe("writer adapters", () => {
         ]
       });
       expect(requests.filter((request) => request.url.includes("/repository/files/") && ["POST", "PUT"].includes(request.method))).toHaveLength(0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("saves Forgejo Writer posts and media in a single commit", async () => {
+    const requests: Array<{ url: string; method: string; body?: unknown }> = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init = {}) => {
+      const url = String(input);
+      const method = init.method ?? "GET";
+      requests.push({ url, method, body: init.body ? JSON.parse(String(init.body)) : undefined });
+      if (url.includes("/contents/content/posts/post.md")) return new Response(JSON.stringify({ type: "file", path: "content/posts/post.md", name: "post.md", sha: "post-sha", content: "" }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.includes("/contents/content/media/photo.jpg")) return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+      if (url.endsWith("/contents")) return new Response(JSON.stringify({ commit: { sha: "new-commit-sha", html_url: "https://forgejo.test/commit" } }), { status: 201, headers: { "content-type": "application/json" } });
+      return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+    };
+
+    try {
+      const adapter = new ForgejoRepositoryAdapter({
+        provider: "forgejo",
+        instanceUrl: "https://forgejo.test",
+        owner: "me",
+        repo: "site",
+        branch: "main",
+        postsPath: "content/posts",
+        mediaPath: "content/media"
+      }, "pat");
+      const result = await adapter.savePost({
+        path: "content/posts/post.md",
+        slug: "post",
+        status: "published",
+        sha: "post-sha",
+        content: "---\ndate: 2026-05-11\n---\n\n![](/media/photo.jpg)",
+        media: [{ path: "content/media/photo.jpg", contentBase64: Buffer.from("image").toString("base64"), message: "Upload media" }]
+      });
+      expect(result.sha).toBe("new-commit-sha");
+      const commitRequest = requests.find((request) => request.url.endsWith("/contents") && request.method === "POST");
+      expect(commitRequest?.body).toMatchObject({
+        branch: "main",
+        message: "Publish post: post",
+        files: [
+          { operation: "update", path: "content/posts/post.md", sha: "post-sha" },
+          { operation: "create", path: "content/media/photo.jpg" }
+        ]
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("deletes Forgejo Writer posts and media in a single commit", async () => {
+    const requests: Array<{ url: string; method: string; body?: unknown }> = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init = {}) => {
+      const url = String(input);
+      const method = init.method ?? "GET";
+      requests.push({ url, method, body: init.body ? JSON.parse(String(init.body)) : undefined });
+      if (url.includes("/contents/content/posts/post.md")) return new Response(JSON.stringify({ type: "file", path: "content/posts/post.md", name: "post.md", sha: "post-sha", content: "" }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.includes("/contents/content/media/photo.jpg")) return new Response(JSON.stringify({ type: "file", path: "content/media/photo.jpg", name: "photo.jpg", sha: "photo-sha", content: "" }), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.endsWith("/contents")) return new Response(JSON.stringify({ commit: { sha: "new-commit-sha", html_url: "https://forgejo.test/commit" } }), { status: 201, headers: { "content-type": "application/json" } });
+      return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+    };
+
+    try {
+      const adapter = new ForgejoRepositoryAdapter({
+        provider: "forgejo",
+        instanceUrl: "https://forgejo.test",
+        owner: "me",
+        repo: "site",
+        branch: "main",
+        postsPath: "content/posts",
+        mediaPath: "content/media"
+      }, "pat");
+      const result = await adapter.deletePost({ path: "content/posts/post.md", slug: "post", sha: "post-sha", mediaPaths: ["content/media/photo.jpg"] });
+      expect(result.sha).toBe("new-commit-sha");
+      const commitRequest = requests.find((request) => request.url.endsWith("/contents") && request.method === "POST");
+      expect(commitRequest?.body).toMatchObject({
+        branch: "main",
+        message: "Delete post: post",
+        files: [
+          { operation: "delete", path: "content/posts/post.md", sha: "post-sha" },
+          { operation: "delete", path: "content/media/photo.jpg", sha: "photo-sha" }
+        ]
+      });
+      expect(requests.filter((request) => request.method === "DELETE")).toHaveLength(0);
     } finally {
       globalThis.fetch = originalFetch;
     }

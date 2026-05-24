@@ -227,19 +227,23 @@ async function selectMultiple<T extends string>(label: string, choices: Choice<T
 }
 
 function commitSyndicationChanges(root: string): void {
-  if (!process.env.GITHUB_ACTIONS && !process.env.GITLAB_CI) return;
+  if (!process.env.GITHUB_ACTIONS && !process.env.GITLAB_CI && !process.env.FORGEJO_ACTIONS) return;
 
-  spawnSync("git", ["config", "user.name", process.env.GITLAB_CI ? "GitLab CI" : "github-actions[bot]"], { cwd: root });
-  spawnSync("git", ["config", "user.email", process.env.GITLAB_CI ? "gitlab-ci@example.invalid" : "41898282+github-actions[bot]@users.noreply.github.com"], { cwd: root });
+  const isGitLab = Boolean(process.env.GITLAB_CI);
+  const isForgejo = Boolean(process.env.FORGEJO_ACTIONS);
+  spawnSync("git", ["config", "user.name", isGitLab ? "GitLab CI" : isForgejo ? "Forgejo Actions" : "github-actions[bot]"], { cwd: root });
+  spawnSync("git", ["config", "user.email", isGitLab ? "gitlab-ci@example.invalid" : isForgejo ? "forgejo-actions@example.invalid" : "41898282+github-actions[bot]@users.noreply.github.com"], { cwd: root });
   spawnSync("git", ["add", "content/posts"], { cwd: root });
   const commit = spawnSync("git", ["commit", "-m", "Update syndication data [skip ci]"], { cwd: root });
   if (commit.status !== 0) return;
 
-  if (process.env.GITLAB_CI && process.env.CI_JOB_TOKEN && process.env.CI_SERVER_HOST && process.env.CI_PROJECT_PATH) {
+  if (isGitLab && process.env.CI_JOB_TOKEN && process.env.CI_SERVER_HOST && process.env.CI_PROJECT_PATH) {
     spawnSync("git", ["remote", "set-url", "origin", `https://gitlab-ci-token:${process.env.CI_JOB_TOKEN}@${process.env.CI_SERVER_HOST}/${process.env.CI_PROJECT_PATH}.git`], { cwd: root });
   }
-  if (process.env.GITLAB_CI && process.env.CI_COMMIT_BRANCH) {
+  if (isGitLab && process.env.CI_COMMIT_BRANCH) {
     spawnSync("git", ["push", "origin", `HEAD:${process.env.CI_COMMIT_BRANCH}`], { cwd: root });
+  } else if (isForgejo && process.env.FORGEJO_REF_NAME) {
+    spawnSync("git", ["push", "origin", `HEAD:${process.env.FORGEJO_REF_NAME}`], { cwd: root });
   } else {
     spawnSync("git", ["push"], { cwd: root });
   }
@@ -247,6 +251,7 @@ function commitSyndicationChanges(root: string): void {
 
 const deploymentChoices: Choice<DeployProviderName | "none">[] = [
   { value: "cloudflare-workers", label: "Cloudflare Workers", description: "deploy with Wrangler" },
+  { value: "netlify", label: "Netlify", description: "deploy with Netlify CLI" },
   { value: "github-pages", label: "GitHub Pages", description: "publish through GitHub Actions" },
   { value: "gitlab-pages", label: "GitLab Pages", description: "publish through GitLab CI" },
   { value: "none", label: "None for now", description: "build locally only" }
@@ -261,12 +266,14 @@ const syndicationChoices: Choice<SyndicationProviderName>[] = [
 const ciChoices: Choice<CiProviderName | "none">[] = [
   { value: "github-actions", label: "GitHub Actions", description: "generate .github/workflows/publish.yml" },
   { value: "gitlab-ci", label: "GitLab CI", description: "generate .gitlab-ci.yml" },
+  { value: "forgejo-actions", label: "Forgejo Actions", description: "generate .forgejo/workflows/publish.yml" },
   { value: "none", label: "None for now", description: "add automation later" }
 ];
 
 const writerProviderChoices: Choice<Exclude<WriterProviderName, "local">>[] = [
   { value: "github", label: "GitHub" },
-  { value: "gitlab", label: "GitLab" }
+  { value: "gitlab", label: "GitLab" },
+  { value: "forgejo", label: "Forgejo" }
 ];
 
 const postKindChoices: Choice<NewPostKind>[] = [
@@ -277,7 +284,14 @@ const postKindChoices: Choice<NewPostKind>[] = [
 function inferredWriterProvider(ci: CiProviderName | "none" | undefined): Exclude<WriterProviderName, "local"> | undefined {
   if (ci === "github-actions") return "github";
   if (ci === "gitlab-ci") return "gitlab";
+  if (ci === "forgejo-actions") return "forgejo";
   return undefined;
+}
+
+function writerProviderLabel(provider: Exclude<WriterProviderName, "local">): string {
+  if (provider === "github") return "GitHub";
+  if (provider === "gitlab") return "GitLab";
+  return "Forgejo";
 }
 
 async function promptInitOptions(directory?: string): Promise<InitSiteOptions> {
@@ -323,14 +337,15 @@ async function promptInitOptions(directory?: string): Promise<InitSiteOptions> {
       title("Writer Provider");
       provider = await selectChoice("Writer provider", writerProviderChoices);
     } else {
-      note(`Writer will use ${provider === "github" ? "GitHub" : "GitLab"} based on your CI choice.`);
+      note(`Writer will use ${writerProviderLabel(provider)} based on your CI choice.`);
     }
+    const instanceUrl = provider === "forgejo" ? await ask("Forgejo instance URL", "https://codeberg.org") || "https://codeberg.org" : undefined;
     let owner = "";
-    while (!owner) owner = await ask(`${provider === "github" ? "GitHub" : "GitLab"} owner or group`);
+    while (!owner) owner = await ask(`${writerProviderLabel(provider)} owner or group`);
     const repoFallback = directory && directory !== "." ? directory : "my-website";
     const repo = await ask("Repository name", repoFallback) || repoFallback;
     const branch = await ask("Branch", "main") || "main";
-    options.writer = { enabled: true, provider, owner, repo, branch };
+    options.writer = { enabled: true, provider, instanceUrl, owner, repo, branch };
   }
 
   return options;

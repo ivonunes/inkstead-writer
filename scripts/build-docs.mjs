@@ -45,6 +45,7 @@ const navGroups = [
     pages: [
       { slug: "deployment", file: "deployment/index.md" },
       { slug: "deployment/cloudflare-workers", file: "deployment/cloudflare-workers.md" },
+      { slug: "deployment/netlify", file: "deployment/netlify.md" },
       { slug: "deployment/github-pages", file: "deployment/github-pages.md" },
       { slug: "deployment/gitlab-pages", file: "deployment/gitlab-pages.md" }
     ]
@@ -63,7 +64,8 @@ const navGroups = [
     pages: [
       { slug: "ci", file: "ci/index.md" },
       { slug: "github-actions", file: "github-actions.md" },
-      { slug: "gitlab-ci", file: "gitlab-ci.md" }
+      { slug: "gitlab-ci", file: "gitlab-ci.md" },
+      { slug: "forgejo-actions", file: "forgejo-actions.md" }
     ]
   },
   {

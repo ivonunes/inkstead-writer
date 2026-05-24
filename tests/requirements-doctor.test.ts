@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { applyWorkflowUpgrades, loadConfig, renderRequirements, runDoctor, workflowUpgradePlan } from "../src/index.js";
 import { cloudflareWorkersProvider } from "../src/adapters/deploy/cloudflare-workers.js";
+import { netlifyProvider } from "../src/adapters/deploy/netlify.js";
 import { useSiteFixture } from "./helpers/site.js";
 
 const fixture = useSiteFixture();
@@ -18,6 +19,20 @@ describe("requirements and doctor", () => {
     const wrangler = files?.find((file) => file.path === "wrangler.toml");
     expect(wrangler?.content).toContain('name = "my-worker"');
     expect(wrangler?.content).toContain('directory = "./build"');
+  });
+
+  it("reports Netlify deploy requirements", async () => {
+    const requirements = renderRequirements({
+      site: { title: "My Website", url: "https://example.com", author: "Your Name" },
+      content: { posts: "content/posts", pages: "content/pages", media: "content/media" },
+      deploy: { provider: "netlify" }
+    });
+    expect(requirements).toContain("NETLIFY_SITE_ID");
+    expect(requirements).toContain("NETLIFY_AUTH_TOKEN");
+
+    const checks = await netlifyProvider.doctor({ root: "/site", env: { NETLIFY_SITE_ID: "site-id" } });
+    expect(checks.find((check) => check.label === "NETLIFY_SITE_ID is set")?.status).toBe("pass");
+    expect(checks.find((check) => check.label === "NETLIFY_AUTH_TOKEN is missing")?.status).toBe("fail");
   });
 
   it("reports adapter-driven requirements and setup checks", async () => {

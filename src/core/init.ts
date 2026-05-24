@@ -16,6 +16,7 @@ export interface InitSiteOptions {
     owner?: string;
     repo?: string;
     branch?: string;
+    instanceUrl?: string;
   };
 }
 
@@ -29,6 +30,7 @@ function siteConfig(projectName: string, options: InitSiteOptions = {}): Inkstea
   if (options.deploy === "gitlab-pages") config.ci = { provider: "gitlab-ci" };
   if (options.deploy === "github-pages") config.deploy = { provider: "github-pages" };
   if (options.deploy === "gitlab-pages") config.deploy = { provider: "gitlab-pages" };
+  if (options.deploy === "netlify") config.deploy = { provider: "netlify" };
   if (options.deploy === "cloudflare-workers" || options.deploy === undefined) {
     config.deploy = { provider: "cloudflare-workers", projectName: options.deployProjectName ?? projectName };
   }
@@ -39,7 +41,8 @@ function siteConfig(projectName: string, options: InitSiteOptions = {}): Inkstea
       provider: options.writer.provider,
       owner: options.writer.owner,
       repo: options.writer.repo,
-      branch: options.writer.branch
+      branch: options.writer.branch,
+      instanceUrl: options.writer.instanceUrl
     };
   }
   return config;

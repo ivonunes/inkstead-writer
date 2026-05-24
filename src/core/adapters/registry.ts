@@ -1,23 +1,27 @@
 import type { CiProviderName, DeployProviderName, InksteadConfig, SyndicationProviderName } from "../config/types.js";
 import type { AdapterRequirement, CiProvider, DeploymentProvider, SyndicationProvider } from "./types.js";
+import { forgejoActionsProvider } from "../../adapters/ci/forgejo-actions.js";
 import { githubActionsProvider } from "../../adapters/ci/github-actions.js";
 import { gitlabCiProvider } from "../../adapters/ci/gitlab-ci.js";
 import { cloudflareWorkersProvider } from "../../adapters/deploy/cloudflare-workers.js";
 import { githubPagesProvider } from "../../adapters/deploy/github-pages.js";
 import { gitlabPagesProvider } from "../../adapters/deploy/gitlab-pages.js";
+import { netlifyProvider } from "../../adapters/deploy/netlify.js";
 import { mastodonProvider } from "../../adapters/syndication/mastodon.js";
 import { blueskyProvider } from "../../adapters/syndication/bluesky.js";
 import { flickrProvider } from "../../adapters/syndication/flickr.js";
 
 export const ciProviders: Record<CiProviderName, CiProvider> = {
   "github-actions": githubActionsProvider,
-  "gitlab-ci": gitlabCiProvider
+  "gitlab-ci": gitlabCiProvider,
+  "forgejo-actions": forgejoActionsProvider
 };
 
 export const deployProviders: Record<DeployProviderName, DeploymentProvider> = {
   "cloudflare-workers": cloudflareWorkersProvider,
   "github-pages": githubPagesProvider,
-  "gitlab-pages": gitlabPagesProvider
+  "gitlab-pages": gitlabPagesProvider,
+  netlify: netlifyProvider
 };
 
 export const syndicationProviders: Record<SyndicationProviderName, SyndicationProvider> = {

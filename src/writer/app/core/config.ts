@@ -1,4 +1,4 @@
-export type WriterProvider = "github" | "gitlab" | "local";
+export type WriterProvider = "github" | "gitlab" | "forgejo" | "local";
 export type SyndicationProvider = "mastodon" | "bluesky" | "flickr";
 
 export interface WriterPublicConfig {
@@ -6,6 +6,7 @@ export interface WriterPublicConfig {
   owner?: string;
   repo?: string;
   branch?: string;
+  instanceUrl?: string;
   postsPath: string;
   mediaPath: string;
   syndicationProviders?: SyndicationProvider[];

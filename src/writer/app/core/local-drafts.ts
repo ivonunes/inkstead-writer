@@ -28,6 +28,7 @@ export function localDraftKey(config: WriterPublicConfig, identifier: string): s
     "inkstead.writer.localDraft",
     draftVersion,
     config.provider,
+    config.instanceUrl ?? "",
     config.owner ?? "",
     config.repo ?? "",
     config.branch ?? "",

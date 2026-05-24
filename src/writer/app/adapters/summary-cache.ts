@@ -34,6 +34,7 @@ function cacheKey(config: WriterPublicConfig): string {
     "inkstead.writer.postSummaries",
     cacheVersion,
     config.provider,
+    config.instanceUrl ?? "",
     config.owner ?? "",
     config.repo ?? "",
     config.branch ?? "",

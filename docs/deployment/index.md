@@ -28,10 +28,11 @@ If `doctor` says a generated workflow differs from Inkstead's current template, 
 npm run upgrade
 ```
 
-The upgrade command updates generated workflow files such as `.github/workflows/publish.yml` or `.gitlab-ci.yml`. It asks before writing unless you pass `-- --force`.
+The upgrade command updates generated workflow files such as `.github/workflows/publish.yml`, `.gitlab-ci.yml`, or `.forgejo/workflows/publish.yml`. It asks before writing unless you pass `-- --force`.
 
 Adapter guides:
 
 - [Cloudflare Workers](./cloudflare-workers/)
+- [Netlify](./netlify/)
 - [GitHub Pages](./github-pages/)
 - [GitLab Pages](./gitlab-pages/)

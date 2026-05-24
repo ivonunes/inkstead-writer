@@ -19,6 +19,7 @@ export function publicWriterConfig(config: InksteadConfig): PublicWriterConfig |
     owner: config.writer.owner,
     repo: config.writer.repo,
     branch: config.writer.branch,
+    instanceUrl: config.writer.instanceUrl,
     postsPath: config.content.posts,
     mediaPath: config.content.media,
     syndicationProviders: config.syndication?.providers ?? [],

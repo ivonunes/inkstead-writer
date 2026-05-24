@@ -64,17 +64,19 @@ const configSchema = z.object({
   writer: z.object({
     enabled: z.boolean().optional(),
     path: z.string().min(1).optional(),
-    provider: z.enum(["github", "gitlab", "local"]),
+    provider: z.enum(["github", "gitlab", "forgejo", "local"]),
     owner: z.string().min(1).optional(),
     repo: z.string().min(1).optional(),
     branch: z.string().min(1).optional(),
+    instanceUrl: z.string().url().optional(),
     categories: z.array(z.string().min(1)).refine((items) => new Set(items).size === items.length, "Writer categories must be unique.").optional()
   }).strict().optional(),
-  ci: z.object({ provider: z.enum(["github-actions", "gitlab-ci"]) }).optional(),
+  ci: z.object({ provider: z.enum(["github-actions", "gitlab-ci", "forgejo-actions"]) }).optional(),
   deploy: z.discriminatedUnion("provider", [
     z.object({ provider: z.literal("cloudflare-workers"), projectName: z.string().min(1) }),
     z.object({ provider: z.literal("github-pages"), projectName: z.string().optional() }),
-    z.object({ provider: z.literal("gitlab-pages"), projectName: z.string().optional() })
+    z.object({ provider: z.literal("gitlab-pages"), projectName: z.string().optional() }),
+    z.object({ provider: z.literal("netlify") })
   ]).optional(),
   syndication: z.object({
     providers: z.array(z.enum(["mastodon", "bluesky", "flickr"]))
@@ -103,6 +105,13 @@ const configSchema = z.object({
           message: `Remote Writer provider requires ${field}.`
         });
       }
+    }
+    if (config.writer.provider === "forgejo" && !config.writer.instanceUrl) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["writer", "instanceUrl"],
+        message: "Forgejo Writer provider requires instanceUrl."
+      });
     }
   }
 });

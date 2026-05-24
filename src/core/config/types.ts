@@ -1,7 +1,7 @@
-export type CiProviderName = "github-actions" | "gitlab-ci";
-export type DeployProviderName = "cloudflare-workers" | "github-pages" | "gitlab-pages";
+export type CiProviderName = "github-actions" | "gitlab-ci" | "forgejo-actions";
+export type DeployProviderName = "cloudflare-workers" | "github-pages" | "gitlab-pages" | "netlify";
 export type SyndicationProviderName = "mastodon" | "bluesky" | "flickr";
-export type WriterProviderName = "github" | "gitlab" | "local";
+export type WriterProviderName = "github" | "gitlab" | "forgejo" | "local";
 
 export interface WriterConfig {
   enabled?: boolean;
@@ -10,6 +10,7 @@ export interface WriterConfig {
   owner?: string;
   repo?: string;
   branch?: string;
+  instanceUrl?: string;
   categories?: string[];
 }
 
@@ -79,7 +80,8 @@ export interface InksteadConfig {
   deploy?:
     | { provider: "cloudflare-workers"; projectName: string }
     | { provider: "github-pages"; projectName?: string }
-    | { provider: "gitlab-pages"; projectName?: string };
+    | { provider: "gitlab-pages"; projectName?: string }
+    | { provider: "netlify" };
   syndication?: {
     providers: SyndicationProviderName[];
   };
