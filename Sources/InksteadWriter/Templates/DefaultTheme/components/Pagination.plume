@@ -1,0 +1,9 @@
+@component Pagination(pagination) {
+  @if pagination.total > 1 {
+  <nav class="pagination" aria-label="Pagination">
+    @if pagination.previousUrl {<a href="{pagination.previousUrl}" aria-label="Newer posts">&larr;</a>} else {<span aria-hidden="true">&larr;</span>}
+    <span class="pagination-status"><span aria-current="page">{pagination.current}</span><span>/</span><span>{pagination.total}</span></span>
+    @if pagination.nextUrl {<a href="{pagination.nextUrl}" aria-label="Older posts">&rarr;</a>} else {<span aria-hidden="true">&rarr;</span>}
+  </nav>
+  }
+}

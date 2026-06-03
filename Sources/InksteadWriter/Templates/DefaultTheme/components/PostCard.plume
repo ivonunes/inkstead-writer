@@ -1,0 +1,27 @@
+@component PostCard(post, showAuthor = true, showReadMore = true) {
+  <li class="post-list-item h-entry" class:note-card="{!post.title}">
+    <div class="post-date">
+      <a class="post-meta u-url" href="{post.urlPath}">
+        <time class="dt-published" datetime="{post.dateIso}">{post.dateDisplay}</time>
+      </a>
+    </div>
+    <div class="post-body">
+    @if post.title {
+    <a class="post-title u-url p-name" href="{post.urlPath}">{post.displayTitle}</a>
+    @if showAuthor {<a class="p-author h-card" hidden href="/">{site.author}</a>}
+    @if post.excerpt {
+    <div class="p-summary">{post.excerpt}</div>
+    @if showReadMore {
+    @if post.hasMore {
+    <p class="read-more"><a href="{post.urlPath}">Continue reading &rarr;</a></p>
+    }
+    }
+    }
+    } else {
+    <data class="p-name" value="{post.displayTitle}"></data>
+    <div class="e-content">{post.html}</div>
+    @if showAuthor {<a class="p-author h-card" hidden href="/">{site.author}</a>}
+    }
+    </div>
+  </li>
+}

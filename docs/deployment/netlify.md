@@ -1,12 +1,14 @@
 # Netlify
 
-Inkstead deploys static sites to Netlify with the Netlify CLI.
+Inkstead Writer deploys static sites to Netlify through the Netlify API.
 
-Choose Netlify during `npx inkstead init`, or add this to `site.config.ts` later:
+Choose Netlify during `inkstead-writer init`, or add this to `inkstead-writer.json` later:
 
-```ts
-deploy: {
-  provider: "netlify"
+```json
+{
+  "deploy": {
+    "provider": "netlify"
+  }
 }
 ```
 
@@ -19,21 +21,21 @@ For local publishing, put those values in `.env`. For automated publishing, add 
 
 `NETLIFY_SITE_ID` is the project ID shown in Netlify project settings. `NETLIFY_AUTH_TOKEN` is a Netlify personal access token.
 
-Run `npm run doctor` before the first publish to confirm the Netlify variables are available.
+Run `./inkstead-writer doctor` before the first publish to confirm the Netlify variables are available.
 
 ## Publish
 
 ```bash
-npm run publish
+./inkstead-writer publish
 ```
 
-`npm run publish` builds and deploys the site before running syndication, so links are live before they are posted elsewhere.
+`./inkstead-writer publish` builds and deploys the site before running syndication, so links are live before they are posted elsewhere.
 
 If you only want to deploy an already-built site:
 
 ```bash
-npm run build
-npm run deploy
+./inkstead-writer build
+./inkstead-writer deploy
 ```
 
-Inkstead deploys the configured build output directory to production with `netlify deploy --prod --no-build`.
+Inkstead Writer packages the configured build output directory as a ZIP archive and uploads it directly to the Netlify deploy API. You do not need the Netlify CLI installed.

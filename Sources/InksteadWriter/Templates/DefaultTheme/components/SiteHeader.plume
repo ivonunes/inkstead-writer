@@ -1,0 +1,13 @@
+@component SiteHeader() {
+  <header class="site-header h-card">
+    <a class="site-title u-url p-name" href="/">{site.title}</a>
+    <nav class="site-nav" aria-label="Site">
+      @if site.navigation.size > 0 {
+      @for item in site.navigation {<a href="{item.url}">{item.name}</a>}
+      } else {
+      @for page in collections.pages {<a href="{page.urlPath}">{page.title}</a>}
+      }
+      <a href="/feed.xml">RSS</a>
+    </nav>
+  </header>
+}

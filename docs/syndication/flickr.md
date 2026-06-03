@@ -1,6 +1,6 @@
 # Flickr
 
-Inkstead can syndicate photo notes to Flickr.
+Inkstead Writer can syndicate photo notes to Flickr.
 
 Required environment variables:
 

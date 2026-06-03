@@ -1,16 +1,18 @@
 # GitHub Pages
 
-Inkstead publishes GitHub Pages sites through GitHub Actions.
+Inkstead Writer publishes GitHub Pages sites through GitHub Actions.
 
-Choose GitHub Pages during `npx inkstead init`, or add this to `site.config.ts` later:
+Choose GitHub Pages during `inkstead-writer init`, or add this to `inkstead-writer.json` later:
 
-```ts
-deploy: {
-  provider: "github-pages"
+```json
+{
+  "deploy": {
+    "provider": "github-pages"
+  }
 }
 ```
 
-GitHub Pages uses GitHub Actions, so Inkstead also generates `.github/workflows/publish.yml` when this adapter is selected during `init`.
+GitHub Pages uses GitHub Actions, so Inkstead Writer also generates `.github/workflows/publish.yml` when this adapter is selected during `init`.
 
 ## Repository Settings
 
@@ -20,11 +22,10 @@ In GitHub, open the repository settings and configure Pages to deploy from GitHu
 
 The generated workflow:
 
-- installs dependencies
-- runs `npm run build`
+- runs `./inkstead-writer publish`
 - deploys the built site to GitHub Pages
 
-Local `npm run deploy` does not publish directly to GitHub Pages. Push to GitHub, or run the workflow manually from the Actions tab.
+Local `./inkstead-writer deploy` does not publish directly to GitHub Pages. Push to GitHub, or run the workflow manually from the Actions tab.
 
 ## Syndication Order
 
@@ -34,4 +35,4 @@ If syndication is enabled, the workflow publishes the site first, then syndicate
 
 GitHub Pages itself does not need deployment secrets. If you use syndication, add the provider variables from `.env.example` as GitHub Actions secrets.
 
-Run `npm run doctor` locally if you want to check content, config, and any syndication variables before pushing.
+Run `./inkstead-writer doctor` locally if you want to check content, config, and any syndication variables before pushing.

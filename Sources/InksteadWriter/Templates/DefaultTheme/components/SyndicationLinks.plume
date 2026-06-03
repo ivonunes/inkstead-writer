@@ -1,0 +1,8 @@
+@component SyndicationLinks(post) {
+  @if post.syndicationUrls.size > 0 {
+  <section>
+    <h2>Also published on...</h2>
+    <ul>@for url in post.syndicationUrls {<li><a class="u-syndication" href="{url}">{url}</a></li>}</ul>
+  </section>
+  }
+}

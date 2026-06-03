@@ -1,6 +1,6 @@
 # Bluesky
 
-Inkstead can publish posts directly to Bluesky.
+Inkstead Writer can publish posts directly to Bluesky.
 
 Required environment variables:
 

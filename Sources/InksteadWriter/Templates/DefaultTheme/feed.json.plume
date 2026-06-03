@@ -1,0 +1,26 @@
+{
+  "version": {feed.version | json},
+  "title": {feed.title | json},
+  @if feed.description {"description": {feed.description | json},}
+  "home_page_url": {feed.homePageUrl | json},
+  "feed_url": {feed.url | json},
+  "authors": [
+    {
+      "name": {site.author | json},
+      "url": {feed.homePageUrl | json}
+    }
+  ],
+  "items": [
+    @for item in feed.items {
+    {item.comma | raw}{
+      "id": {item.id | json},
+      "url": {item.url | json},
+      @if item.title {"title": {item.title | json},}
+      "content_html": {item.contentHTML | json},
+      "content_text": {item.contentText | json},
+      "date_published": {item.datePublished | json},
+      "date_modified": {item.dateModified | json}
+    }
+    }
+  ]
+}

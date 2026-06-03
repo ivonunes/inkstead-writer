@@ -1,6 +1,6 @@
 # Mastodon
 
-Inkstead can publish posts directly to Mastodon.
+Inkstead Writer can publish posts directly to Mastodon.
 
 Required environment variables:
 

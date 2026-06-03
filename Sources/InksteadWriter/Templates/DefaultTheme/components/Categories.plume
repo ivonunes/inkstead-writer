@@ -1,0 +1,5 @@
+@component Categories(post) {
+  @if post.categories.size > 0 {
+  <p class="categories">@for category in post.categoryLinks {<a class="p-category" href="{category.url}">#{category.name}</a>}</p>
+  }
+}

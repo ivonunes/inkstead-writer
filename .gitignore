@@ -1,6 +1,8 @@
 node_modules/
+.build/
 dist/
 docs-site/
+plume/
 .env
 .env.*
 !.env.example

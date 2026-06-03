@@ -1,0 +1,7 @@
+@component PostList(posts, showAuthor = true, showReadMore = true) {
+  <ul class="post-list">
+    @for post in posts {
+    @PostCard(post, showAuthor: showAuthor, showReadMore: showReadMore)
+    }
+  </ul>
+}

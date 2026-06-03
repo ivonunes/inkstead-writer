@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="{site.lang | default("en")}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{meta.title}</title>
+  @if meta.description {<meta name="description" content="{meta.description}">}
+  <meta property="og:title" content="{meta.title}">
+  @if meta.description {<meta property="og:description" content="{meta.description}">}
+  @if meta.canonicalUrl {<link rel="canonical" href="{meta.canonicalUrl}"><meta property="og:url" content="{meta.canonicalUrl}">}
+  @for feed in meta.feedAlternates {
+  <link rel="alternate" type="{feed.type}" title="{feed.title}" href="{feed.href}">
+  }
+  @if site.avatar {<link rel="icon" href="{site.avatar}">}
+  @for social in site.social {@if social.relMe || social.url.contains("http") {<link rel="me" href="{social.url}">}}
+  @SiteStyles()
+</head>
+<body id="top">
+  @SiteHeader()
+  <main>{content}</main>
+  @SiteFooter()
+</body>
+</html>

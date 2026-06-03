@@ -1,0 +1,7 @@
+<section class="home-intro">
+  @if site.description {
+  <p>{site.description}</p>
+  }
+</section>
+@PostList(posts)
+@Pagination(pagination)

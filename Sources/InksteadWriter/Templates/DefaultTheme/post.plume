@@ -1,0 +1,10 @@
+<article class="single-entry h-entry">
+  @if post.title {<h1 class="p-name">{post.title}</h1>} else {<data class="p-name" value="{post.displayTitle}"></data>}
+  <time class="muted dt-published" datetime="{post.dateIso}">{post.dateDisplay}</time>
+  <a class="u-url u-uid" hidden href="{post.urlPath}">Permalink</a>
+  <a class="p-author h-card" hidden href="/">{site.author}</a>
+  @for photo in post.photos {@image(photo, alt: post.alt | default(""), class: "u-photo")}
+  <div class="e-content">{post.html}</div>
+  @Categories(post)
+  @SyndicationLinks(post)
+</article>

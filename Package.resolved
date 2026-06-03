@@ -1,0 +1,15 @@
+{
+  "originHash" : "e407bba98fe3f102bfc68f57655efe19dbc86f986fc97776a379f3e51ea38228",
+  "pins" : [
+    {
+      "identity" : "plume",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ivonunes/plume.git",
+      "state" : {
+        "revision" : "681891420807b07ab3284711ef59baeac4fa1dd2",
+        "version" : "1.0.0"
+      }
+    }
+  ],
+  "version" : 3
+}

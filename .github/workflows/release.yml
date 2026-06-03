@@ -3,77 +3,170 @@ name: Release
 on:
   push:
     tags:
-      - "*.*.*"
+      - "v*.*.*"
 
 permissions:
   contents: write
-  id-token: write
-  pages: write
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Release package
+  launcher:
+    name: Launcher script
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          registry-url: https://registry.npmjs.org
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Check tag matches package version
+      - name: Smoke test launcher
         run: |
-          TAG_NAME="${GITHUB_REF_NAME}"
-          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
-          if [ "$TAG_NAME" != "$PACKAGE_VERSION" ]; then
-            echo "Tag $TAG_NAME does not match package.json version $PACKAGE_VERSION"
+          test -x support/inkstead-writer
+          if support/inkstead-writer build 2>launcher-error.txt; then
+            echo "Launcher unexpectedly succeeded outside an Inkstead Writer site."
+            exit 1
+          fi
+          grep -q "not inside an Inkstead Writer site" launcher-error.txt
+          test -x support/install.sh
+          sh -n support/install.sh
+          support/install.sh --help >/dev/null
+
+      - name: Package launcher assets
+        run: |
+          mkdir -p artifact
+          cp support/inkstead-writer "artifact/inkstead-writer-${GITHUB_REF_NAME}"
+          chmod +x "artifact/inkstead-writer-${GITHUB_REF_NAME}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: launcher-script
+          path: artifact/*
+
+  linux:
+    name: Linux binary (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: swift:latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Check tag matches Inkstead Writer version
+        run: |
+          VERSION="$(sed -n 's/.*currentVersion = "\(.*\)".*/\1/p' Sources/InksteadWriter/Config/InksteadWriterConfig.swift)"
+          if [ "${GITHUB_REF_NAME#v}" != "$VERSION" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match Inkstead Writer version $VERSION"
             exit 1
           fi
 
       - name: Test
-        run: npm test
+        run: swift test
 
-      - name: Build package
-        run: npm run build
+      - name: Build
+        run: swift build -c release --static-swift-stdlib
 
-      - name: Publish to npm
-        run: npm publish
+      - name: Package
+        run: |
+          mkdir -p artifact
+          cp .build/release/inkstead-writer artifact/inkstead-writer
+          cp LICENSE.txt artifact/LICENSE.txt
+          tar -C artifact -czf inkstead-writer-${GITHUB_REF_NAME}-linux-${{ matrix.arch }}.tar.gz inkstead-writer LICENSE.txt
 
-      - name: Create GitHub release
-        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+      - name: Smoke test archive
+        run: |
+          mkdir -p smoke
+          tar -xzf inkstead-writer-${GITHUB_REF_NAME}-linux-${{ matrix.arch }}.tar.gz -C smoke
+          test -x smoke/inkstead-writer
+          test -f smoke/LICENSE.txt
+          smoke/inkstead-writer version
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-${{ matrix.arch }}-binary
+          path: inkstead-writer-*-linux-${{ matrix.arch }}.tar.gz
+
+  macos:
+    name: macOS binary (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            arch: arm64
+          - runner: macos-26-intel
+            arch: x86_64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Check tag matches Inkstead Writer version
+        run: |
+          VERSION="$(sed -n 's/.*currentVersion = "\(.*\)".*/\1/p' Sources/InksteadWriter/Config/InksteadWriterConfig.swift)"
+          if [ "${GITHUB_REF_NAME#v}" != "$VERSION" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match Inkstead Writer version $VERSION"
+            exit 1
+          fi
+
+      - name: Test
+        run: swift test
+
+      - name: Build
+        run: swift build -c release
+
+      - name: Package
+        run: |
+          mkdir -p artifact
+          cp .build/release/inkstead-writer artifact/inkstead-writer
+          cp LICENSE.txt artifact/LICENSE.txt
+          tar -C artifact -czf inkstead-writer-${GITHUB_REF_NAME}-macos-${{ matrix.arch }}.tar.gz inkstead-writer LICENSE.txt
+
+      - name: Smoke test archive
+        run: |
+          mkdir -p smoke
+          tar -xzf inkstead-writer-${GITHUB_REF_NAME}-macos-${{ matrix.arch }}.tar.gz -C smoke
+          test -x smoke/inkstead-writer
+          test -f smoke/LICENSE.txt
+          smoke/inkstead-writer version
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-${{ matrix.arch }}-binary
+          path: inkstead-writer-*-macos-${{ matrix.arch }}.tar.gz
+
+  release:
+    name: Publish GitHub release
+    needs:
+      - launcher
+      - linux
+      - macos
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          sha256sum "inkstead-writer-${GITHUB_REF_NAME}" *.tar.gz > "inkstead-writer-${GITHUB_REF_NAME}-SHA256SUMS"
+          sha256sum -c "inkstead-writer-${GITHUB_REF_NAME}-SHA256SUMS"
+
+      - name: Create release
+        run: gh release create "$GITHUB_REF_NAME" "artifacts/inkstead-writer-${GITHUB_REF_NAME}" artifacts/*.tar.gz artifacts/*-SHA256SUMS --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
-
-      - name: Build docs
-        run: npm run docs
-
-      - name: Setup GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload docs artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs-site
-
-  deploy-docs:
-    name: Deploy docs
-    needs: release
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4

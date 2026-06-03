@@ -1,13 +1,15 @@
 # Cloudflare Workers
 
-Inkstead deploys static sites to Cloudflare Workers with Wrangler.
+Inkstead Writer deploys static sites to Cloudflare Workers through the Cloudflare Workers API.
 
-Choose Cloudflare Workers during `npx inkstead init`, or add this to `site.config.ts` later:
+Choose Cloudflare Workers during `inkstead-writer init`, or add this to `inkstead-writer.json` later:
 
-```ts
-deploy: {
-  provider: "cloudflare-workers",
-  projectName: "my-website"
+```json
+{
+  "deploy": {
+    "provider": "cloudflare-workers",
+    "projectName": "my-website"
+  }
 }
 ```
 
@@ -20,23 +22,23 @@ Change `projectName` to the Worker name you want to deploy.
 
 For local publishing, put those values in `.env`. For automated publishing, add them as CI secrets or variables.
 
-Run `npm run doctor` before the first publish to confirm the Cloudflare variables are available.
+Run `./inkstead-writer doctor` before the first publish to confirm the Cloudflare variables are available.
 
 ## Publish
 
 ```bash
-npm run publish
+./inkstead-writer publish
 ```
 
-`npm run publish` builds and deploys the site before running syndication, so links are live before they are posted elsewhere.
+`./inkstead-writer publish` builds and deploys the site before running syndication, so links are live before they are posted elsewhere.
 
 If you only want to deploy an already-built site:
 
 ```bash
-npm run build
-npm run deploy
+./inkstead-writer build
+./inkstead-writer deploy
 ```
 
-Inkstead writes the Wrangler files it needs during deployment, including the Worker entrypoint and asset directory configuration.
+Inkstead Writer uploads the configured build output directory with the Workers static assets direct-upload API, then deploys a small Worker module that serves those assets. You do not need Wrangler installed.
 
-If `wrangler.toml` already exists, Inkstead leaves it alone. That lets you customize Wrangler settings such as custom domains, routes, or environment-specific configuration after the first deploy.
+Routes, custom domains, and workers.dev subdomains are still managed in Cloudflare. Inkstead Writer deploys the Worker script named by `projectName`.

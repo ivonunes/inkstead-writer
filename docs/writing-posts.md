@@ -14,24 +14,56 @@ Your post content goes here.
 To create a post locally with the right filename and frontmatter:
 
 ```bash
-npx inkstead new post
+inkstead-writer new post
 ```
 
-Inkstead asks whether the post is a long article or a note. Articles get a `title` field and an empty body; notes use the text you enter as the body and omit `title`.
+Inkstead Writer asks whether the post is a long article or a note. Articles get a `title` field and an empty body; notes use the text you enter as the body and omit `title`.
 
 If syndication is enabled for the site, new articles and notes include the enabled text-capable providers in `syndicate` by default. Photo-only providers are skipped for text posts.
 
 ## Articles, Notes, And Photo Notes
 
-Inkstead infers the kind of post from the content:
+Inkstead Writer infers the kind of post from the content:
 
 - Posts with a `title` are articles.
 - Posts without a `title` are notes.
 - Untitled posts with images are photo notes.
 
-Inkstead infers photo notes from Markdown or HTML images in the body.
+Inkstead Writer infers photo notes from Markdown or HTML images in the body.
 
 Pages live in `content/pages` and never syndicate.
+
+## Collections
+
+Custom collections live in `content/collections/<name>` as Markdown files. They are useful for structured content that is not part of the blog timeline, such as books, projects, albums, talks, or links.
+
+```txt
+content/collections/books/the-left-hand-of-darkness.md
+```
+
+```md
+---
+title: The Left Hand of Darkness
+author: Ursula K. Le Guin
+order: 1
+---
+
+Notes about the book.
+```
+
+The collection name must be a valid Plume identifier, such as `books` or `projects`. During builds, items are available to templates as `collections.books`, `collections.projects`, and so on. Frontmatter fields are exposed directly on each item, and the Markdown body is available as safe HTML through `item.html` or `item.content`.
+
+```plume
+@for book in collections.books {
+  <article>
+    <h2>{book.title}</h2>
+    <p>{book.author}</p>
+    {book.content}
+  </article>
+}
+```
+
+Items with `status: draft` are skipped. Items sort by `order` ascending when present, then by `date` descending, then by title and path.
 
 ## Permalinks
 
@@ -59,19 +91,19 @@ Morning coffee.
 
 You can keep original files in `content/media` and reference the public path you want your theme to render.
 
-During builds, Inkstead copies `content/media` to `/media/`, resizes very large images to a reasonable web size, and strips metadata from the copied files. Your originals in `content/media` are left unchanged. Passthrough assets are not optimized.
+During builds, Inkstead Writer copies `content/media` to `/media/`. It resizes very large JPEG, PNG, and WebP images to a reasonable web size and strips metadata from the copied files on macOS and Linux. Your originals in `content/media` are left unchanged. Passthrough assets are not optimized.
 
-You can tune or disable this in `site.config.ts`:
+You can tune or disable this in `inkstead-writer.json`:
 
-```ts
-export default defineConfig({
-  photos: {
-    optimize: true,
-    maxWidth: 2400,
-    maxHeight: 2400,
-    quality: 82
+```json
+{
+  "media": {
+    "optimize": true,
+    "maxWidth": 2400,
+    "maxHeight": 2400,
+    "quality": 82
   }
-});
+}
 ```
 
 ## Categories
@@ -84,13 +116,13 @@ categories:
   - Travel
 ```
 
-When categories are present, Inkstead generates paginated category indexes at `/categories/<category>/` and RSS feeds at `/categories/<category>/feed.xml`.
+When categories are present, Inkstead Writer generates paginated category indexes at `/categories/<category>/`, RSS feeds at `/categories/<category>/feed.xml`, and JSON feeds at `/categories/<category>/feed.json`.
 
 Posts in nested folders under `content/posts` also receive categories from their directory names. For example, `content/posts/essays/my-post.md` is assigned to `Essays` even without category frontmatter. Posts directly inside `content/posts` only use frontmatter categories.
 
 ## Pagination
 
-Inkstead paginates the homepage and category indexes automatically. By default, each index page shows 20 posts before creating pages like:
+Inkstead Writer paginates the homepage and category indexes automatically. By default, each index page shows 20 posts before creating pages like:
 
 ```txt
 /page/2/
@@ -101,12 +133,12 @@ The default theme includes `Newer` and `Older` links when more pages exist.
 
 To change the number of posts per page:
 
-```ts
-export default defineConfig({
-  pagination: {
-    postsPerPage: 10
+```json
+{
+  "pagination": {
+    "postsPerPage": 10
   }
-});
+}
 ```
 
 ## Excerpts
@@ -117,7 +149,7 @@ Article index excerpts use `summary` frontmatter when present:
 summary: A short custom introduction for index pages.
 ```
 
-Without `summary`, Inkstead uses the content before `<!--more-->`.
+Without `summary`, Inkstead Writer uses the content before `<!--more-->`.
 
 ```md
 This appears on index pages.
@@ -129,7 +161,7 @@ This only appears on the post page.
 
 Themes can use `post.excerpt` and `post.hasMore`. `post.excerpt` is rendered HTML, so Markdown links and formatting work on index pages.
 
-If neither `summary` nor `<!--more-->` exists, Inkstead creates a short excerpt from the post body automatically.
+If neither `summary` nor `<!--more-->` exists, Inkstead Writer creates a short excerpt from the post body automatically.
 
 ## Raw HTML And Line Breaks
 
