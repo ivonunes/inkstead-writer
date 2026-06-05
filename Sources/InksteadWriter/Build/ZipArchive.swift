@@ -1,9 +1,14 @@
 import Foundation
 
 enum ZipArchive {
-    struct Entry {
+    struct Entry: Sendable {
         var name: String
         var bytes: Data
+    }
+
+    private struct EntryCandidate: Sendable {
+        var name: String
+        var url: URL
     }
 
     static func archiveDirectory(_ directory: URL) throws -> Data {
@@ -18,14 +23,17 @@ enum ZipArchive {
         guard let enumerator = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: [.isRegularFileKey], options: []) else {
             throw InksteadWriterError.io("Could not read build output directory \(directory.path).")
         }
-        var entries: [Entry] = []
+        var candidates: [EntryCandidate] = []
         for case let file as URL in enumerator {
             let values = try file.resourceValues(forKeys: [.isRegularFileKey])
             guard values.isRegularFile == true else { continue }
             let path = file.standardizedFileURL.path
             let relative = path.hasPrefix(rootPath) ? String(path.dropFirst(rootPath.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/")) : file.lastPathComponent
             guard !relative.isEmpty else { continue }
-            entries.append(Entry(name: relative.replacingOccurrences(of: "\\", with: "/"), bytes: try Data(contentsOf: file)))
+            candidates.append(EntryCandidate(name: relative.replacingOccurrences(of: "\\", with: "/"), url: file))
+        }
+        let entries = try BuildConcurrency.map(candidates) { candidate in
+            Entry(name: candidate.name, bytes: try Data(contentsOf: candidate.url))
         }
         return entries.sorted { $0.name < $1.name }
     }

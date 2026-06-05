@@ -22,6 +22,58 @@ public struct ImageOptimizationOptions: Equatable, Sendable {
     }
 }
 
+public struct ImageOptimizationSummary: Equatable, Sendable {
+    public var checked: Int
+    public var reusedFromCache: Int
+    public var generatedCacheEntries: Int
+    public var copiedWithoutOptimization: Int
+    public var unchangedCopies: Int
+
+    public init(
+        checked: Int = 0,
+        reusedFromCache: Int = 0,
+        generatedCacheEntries: Int = 0,
+        copiedWithoutOptimization: Int = 0,
+        unchangedCopies: Int = 0
+    ) {
+        self.checked = checked
+        self.reusedFromCache = reusedFromCache
+        self.generatedCacheEntries = generatedCacheEntries
+        self.copiedWithoutOptimization = copiedWithoutOptimization
+        self.unchangedCopies = unchangedCopies
+    }
+
+    public var isEmpty: Bool {
+        checked == 0
+    }
+
+    public var cacheMisses: Int {
+        generatedCacheEntries
+    }
+
+    mutating func add(_ outcome: ImageOptimizationOutcome) {
+        checked += 1
+        switch outcome {
+        case .reusedFromCache:
+            reusedFromCache += 1
+        case .generatedCacheEntry:
+            generatedCacheEntries += 1
+        case .copiedWithoutOptimization:
+            copiedWithoutOptimization += 1
+        case .unchangedCopy:
+            unchangedCopies += 1
+        }
+    }
+
+    mutating func merge(_ other: ImageOptimizationSummary) {
+        checked += other.checked
+        reusedFromCache += other.reusedFromCache
+        generatedCacheEntries += other.generatedCacheEntries
+        copiedWithoutOptimization += other.copiedWithoutOptimization
+        unchangedCopies += other.unchangedCopies
+    }
+}
+
 public struct ImageDimensions: Equatable {
     public var width: Int
     public var height: Int
@@ -54,25 +106,27 @@ public enum ImageOptimizer {
         )
     }
 
+    @discardableResult
     public static func optimizeBuiltImages(
         root: URL,
         config: InksteadWriterConfig,
         cacheRoot: URL? = nil
-    ) throws {
+    ) throws -> ImageOptimizationSummary {
         let options = options(config: config)
-        guard options.enabled else { return }
+        guard options.enabled else { return ImageOptimizationSummary() }
         let files = imageFiles(root: root)
-        guard !files.isEmpty else { return }
+        guard !files.isEmpty else { return ImageOptimizationSummary() }
         let cacheRoot = cacheRoot ?? mediaCacheRoot()
-        let workerCount = min(max(1, ProcessInfo.processInfo.activeProcessorCount), files.count, 4)
+        let workerCount = BuildConcurrency.workerCount(for: files.count)
         let queue = OperationQueue()
         queue.maxConcurrentOperationCount = workerCount
         let errors = ImageOptimizationErrorBox()
+        let summary = ImageOptimizationSummaryBox()
 
         for file in files {
             queue.addOperation {
                 do {
-                    try optimizeImage(at: file, options: options, cacheRoot: cacheRoot)
+                    summary.add(try optimizeImage(at: file, options: options, cacheRoot: cacheRoot))
                 } catch {
                     errors.setIfEmpty(error)
                 }
@@ -83,27 +137,32 @@ public enum ImageOptimizer {
         if let firstError = errors.firstError {
             throw firstError
         }
+        return summary.value
     }
 
+    @discardableResult
     public static func copyOptimizedMedia(
         from source: URL,
         to destination: URL,
         config: InksteadWriterConfig,
         cacheRoot: URL? = nil
-    ) throws {
-        guard FileManager.default.fileExists(atPath: source.path) else { return }
+    ) throws -> ImageOptimizationSummary {
+        guard FileManager.default.fileExists(atPath: source.path) else { return ImageOptimizationSummary() }
         let options = options(config: config)
         let cacheRoot = cacheRoot ?? mediaCacheRoot()
         let values = try source.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
         if values.isDirectory == true {
-            try copyMediaDirectory(source, to: destination, options: options, cacheRoot: cacheRoot)
+            return try copyMediaDirectory(source, to: destination, options: options, cacheRoot: cacheRoot)
         } else if values.isRegularFile == true {
-            try copyMediaFile(source, to: destination, options: options, cacheRoot: cacheRoot)
+            var summary = ImageOptimizationSummary()
+            summary.add(try copyMediaFile(source, to: destination, options: options, cacheRoot: cacheRoot))
+            return summary
         }
+        return ImageOptimizationSummary()
     }
 
     public static func dimensions(of url: URL, cacheRoot: URL? = nil) throws -> ImageDimensions? {
-        let cacheRoot = (cacheRoot ?? mediaCacheRoot()).appendingPathComponent("dimensions-v1")
+        let cacheRoot = (cacheRoot ?? mediaCacheRoot()).appendingPathComponent("dimensions-v2")
         let cacheURL = try cachedImageDimensionsURL(source: url, cacheRoot: cacheRoot)
         if let cached = try cachedImageDimensions(at: cacheURL) {
             return cached
@@ -135,9 +194,11 @@ public enum ImageOptimizer {
         to destination: URL,
         options: ImageOptimizationOptions,
         cacheRoot: URL
-    ) throws {
+    ) throws -> ImageOptimizationSummary {
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
-        guard let enumerator = FileManager.default.enumerator(at: source, includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey, .contentModificationDateKey]) else { return }
+        guard let enumerator = FileManager.default.enumerator(at: source, includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey]) else {
+            return ImageOptimizationSummary()
+        }
         var files: [(source: URL, target: URL)] = []
         for case let item as URL in enumerator {
             let relative = item.standardizedFileURL.path
@@ -152,16 +213,17 @@ public enum ImageOptimizer {
                 files.append((item, target))
             }
         }
-        guard !files.isEmpty else { return }
+        guard !files.isEmpty else { return ImageOptimizationSummary() }
 
-        let workerCount = min(max(1, ProcessInfo.processInfo.activeProcessorCount), files.count, 4)
+        let workerCount = BuildConcurrency.workerCount(for: files.count)
         let queue = OperationQueue()
         queue.maxConcurrentOperationCount = workerCount
         let errors = ImageOptimizationErrorBox()
+        let summary = ImageOptimizationSummaryBox()
         for file in files {
             queue.addOperation {
                 do {
-                    try copyMediaFile(file.source, to: file.target, options: options, cacheRoot: cacheRoot)
+                    summary.add(try copyMediaFile(file.source, to: file.target, options: options, cacheRoot: cacheRoot))
                 } catch {
                     errors.setIfEmpty(error)
                 }
@@ -172,6 +234,7 @@ public enum ImageOptimizer {
         if let firstError = errors.firstError {
             throw firstError
         }
+        return summary.value
     }
 
     private static func copyMediaFile(
@@ -179,31 +242,31 @@ public enum ImageOptimizer {
         to destination: URL,
         options: ImageOptimizationOptions,
         cacheRoot: URL
-    ) throws {
+    ) throws -> ImageOptimizationOutcome {
         try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
         guard options.enabled, ImageEncoder.isSupportedImage(source) else {
             if FileManager.default.fileExists(atPath: destination.path),
                try filesHaveSameContents(source, destination) {
-                return
+                return .unchangedCopy
             }
             if FileManager.default.fileExists(atPath: destination.path) {
                 try FileManager.default.removeItem(at: destination)
             }
             try FileManager.default.copyItem(at: source, to: destination)
-            return
+            return .copiedWithoutOptimization
         }
 
         let cacheURL = try cachedOptimizedImageURL(source: source, options: options, cacheRoot: cacheRoot)
         if FileManager.default.fileExists(atPath: cacheURL.path) {
             if FileManager.default.fileExists(atPath: destination.path),
                try filesHaveSameContents(cacheURL, destination) {
-                return
+                return .reusedFromCache
             }
             if FileManager.default.fileExists(atPath: destination.path) {
                 try FileManager.default.removeItem(at: destination)
             }
             try FileManager.default.copyItem(at: cacheURL, to: destination)
-            return
+            return .reusedFromCache
         }
 
         if FileManager.default.fileExists(atPath: destination.path) {
@@ -212,17 +275,19 @@ public enum ImageOptimizer {
         try FileManager.default.copyItem(at: source, to: destination)
         try ImageEncoder.optimizeImage(at: destination, options: options)
         try storeOptimizedImageCache(from: destination, to: cacheURL)
+        return .generatedCacheEntry
     }
 
-    private static func optimizeImage(at url: URL, options: ImageOptimizationOptions, cacheRoot: URL) throws {
+    private static func optimizeImage(at url: URL, options: ImageOptimizationOptions, cacheRoot: URL) throws -> ImageOptimizationOutcome {
         let cacheURL = try cachedOptimizedImageURL(source: url, options: options, cacheRoot: cacheRoot)
         if FileManager.default.fileExists(atPath: cacheURL.path) {
             try replaceFile(at: url, with: cacheURL)
-            return
+            return .reusedFromCache
         }
 
         try ImageEncoder.optimizeImage(at: url, options: options)
         try storeOptimizedImageCache(from: url, to: cacheURL)
+        return .generatedCacheEntry
     }
 
     private static func cachedOptimizedImageURL(
@@ -230,13 +295,12 @@ public enum ImageOptimizer {
         options: ImageOptimizationOptions,
         cacheRoot: URL
     ) throws -> URL {
-        let values = try source.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
-        let modified = values.contentModificationDate?.timeIntervalSince1970 ?? 0
+        let values = try source.resourceValues(forKeys: [.fileSizeKey])
         let fingerprintInput = [
-            "media-v2",
+            "media-v3",
             source.standardizedFileURL.path,
             String(values.fileSize ?? 0),
-            String(format: "%.6f", modified),
+            try contentHash(of: source),
             String(options.maxWidth),
             String(options.maxHeight),
             String(options.quality),
@@ -245,19 +309,18 @@ public enum ImageOptimizer {
         let key = SHA256.hex(Data(fingerprintInput.utf8))
         let ext = source.pathExtension.isEmpty ? "bin" : source.pathExtension.lowercased()
         return cacheRoot
-            .appendingPathComponent("v2")
+            .appendingPathComponent("v3")
             .appendingPathComponent(String(key.prefix(2)))
             .appendingPathComponent("\(key).\(ext)")
     }
 
     private static func cachedImageDimensionsURL(source: URL, cacheRoot: URL) throws -> URL {
-        let values = try source.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
-        let modified = values.contentModificationDate?.timeIntervalSince1970 ?? 0
+        let values = try source.resourceValues(forKeys: [.fileSizeKey])
         let fingerprintInput = [
-            "dimensions-v1",
+            "dimensions-v2",
             source.standardizedFileURL.path,
             String(values.fileSize ?? 0),
-            String(format: "%.6f", modified),
+            try contentHash(of: source),
             source.pathExtension.lowercased()
         ].joined(separator: "\n")
         let key = SHA256.hex(Data(fingerprintInput.utf8))
@@ -309,9 +372,20 @@ public enum ImageOptimizer {
         return try Data(contentsOf: lhs) == Data(contentsOf: rhs)
     }
 
+    private static func contentHash(of url: URL) throws -> String {
+        try SHA256.hex(Data(contentsOf: url))
+    }
+
     private static func mediaCacheRoot(environment: [String: String] = ProcessInfo.processInfo.environment) -> URL {
         InksteadWriterReleaseResolver.cacheRoot(environment: environment).appendingPathComponent("media")
     }
+}
+
+enum ImageOptimizationOutcome {
+    case reusedFromCache
+    case generatedCacheEntry
+    case copiedWithoutOptimization
+    case unchangedCopy
 }
 
 private final class ImageOptimizationErrorBox: @unchecked Sendable {
@@ -329,6 +403,23 @@ private final class ImageOptimizationErrorBox: @unchecked Sendable {
         if storedError == nil {
             storedError = error
         }
+        lock.unlock()
+    }
+}
+
+private final class ImageOptimizationSummaryBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var summary = ImageOptimizationSummary()
+
+    var value: ImageOptimizationSummary {
+        lock.lock()
+        defer { lock.unlock() }
+        return summary
+    }
+
+    func add(_ outcome: ImageOptimizationOutcome) {
+        lock.lock()
+        summary.add(outcome)
         lock.unlock()
     }
 }

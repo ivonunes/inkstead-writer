@@ -80,7 +80,9 @@ public enum ContentLoader {
     public static func loadPosts(root: URL, config: InksteadWriterConfig) throws -> [NormalizedPost] {
         let postsRoot = root.appendingPathComponent(config.content.posts)
         let files = try markdownFiles(in: postsRoot)
-        var posts = try files.map { try normalizePost(parseMarkdownFile($0, config: config), config: config, root: root) }
+        var posts = try BuildConcurrency.map(files) {
+                try normalizePost(parseMarkdownFile($0, config: config), config: config, root: root)
+            }
             .filter { $0.parsed.frontmatter["status"]?.string?.lowercased() != "draft" }
             .sorted { $0.date > $1.date }
         for index in posts.indices {
@@ -92,7 +94,7 @@ public enum ContentLoader {
 
     public static func loadPages(root: URL, config: InksteadWriterConfig) throws -> [NormalizedPage] {
         let pagesRoot = root.appendingPathComponent(config.content.pages)
-        return try markdownFiles(in: pagesRoot).map {
+        return try BuildConcurrency.map(markdownFiles(in: pagesRoot)) {
             try normalizePage(parseMarkdownFile($0, config: config), config: config)
         }
     }
@@ -115,8 +117,9 @@ public enum ContentLoader {
             guard !reserved.contains(name) else {
                 throw InksteadWriterError.config("Collection directory \(name) conflicts with a built-in collection.")
             }
-            let items = try markdownFiles(in: directory)
-                .map { try normalizeCollectionItem(parseMarkdownFile($0, config: config), collection: name, root: root) }
+            let items = try BuildConcurrency.map(markdownFiles(in: directory)) {
+                    try normalizeCollectionItem(parseMarkdownFile($0, config: config), collection: name, root: root)
+                }
                 .filter { $0.frontmatter["status"]?.string?.lowercased() != "draft" }
                 .sorted(by: compareCollectionItems)
             collections[name] = items

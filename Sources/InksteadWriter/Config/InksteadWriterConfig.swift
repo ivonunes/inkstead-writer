@@ -1,7 +1,7 @@
 import Foundation
 
 public enum InksteadWriterMetadata {
-    public static let currentVersion = "2.0.3"
+    public static let currentVersion = "2.0.4"
     public static let configFileName = "inkstead-writer.json"
     public static let legacyConfigFileName = "inkstead.json"
     public static let executableName = "inkstead-writer"
@@ -311,7 +311,7 @@ public struct SyndicationConfig: Codable, Equatable {
     public var providers: [SyndicationProviderName]
 }
 
-public struct InksteadWriterConfig: Codable, Equatable {
+public struct InksteadWriterConfig: Codable, Equatable, @unchecked Sendable {
     public var legacyInkstead: LegacyInksteadMetadata?
     public var version: String
     public var site: SiteConfig

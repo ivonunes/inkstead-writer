@@ -221,7 +221,7 @@ public enum AdapterSupport {
                   path: |
                     ~/.cache/inkstead-writer/media
                     ~/.cache/inkstead-writer/data
-                  key: inkstead-writer-data-${{ runner.os }}-${{ hashFiles('inkstead-writer.json') }}
+                  key: inkstead-writer-data-${{ runner.os }}-${{ hashFiles('inkstead-writer.json', 'content/media/**') }}
                   restore-keys: |
                     inkstead-writer-data-${{ runner.os }}-
         """

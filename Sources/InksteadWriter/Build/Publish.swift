@@ -5,20 +5,38 @@ public enum Publish {
     public static func publishSite(
         root: URL,
         config: InksteadWriterConfig,
-        build: (URL, InksteadWriterConfig) throws -> Void = SiteBuilder.build,
+        build: (URL, InksteadWriterConfig) throws -> Void = { root, config in
+            try SiteBuilder.build(root: root, config: config, log: { print($0) })
+        },
         deploy: (URL, InksteadWriterConfig) async throws -> Void = { root, config in try await Deploy.deploySite(root: root, config: config) },
         syndicate: (URL, InksteadWriterConfig) async -> SyndicationSummary = { root, config in await Syndicator.syndicateSite(root: root, config: config) },
-        commit: (URL) throws -> Void = { root in _ = try commitSyndicationChanges(root: root) }
+        commit: (URL) throws -> Void = { root in _ = try commitSyndicationChanges(root: root) },
+        log: (String) -> Void = { print($0) }
     ) async throws -> SyndicationSummary {
+        let publishStarted = Date()
+        let buildStarted = Date()
         try build(root, config)
-        try await deploy(root, config)
+        log("Build completed in \(formatDuration(since: buildStarted)).")
 
+        let deployStarted = Date()
+        try await deploy(root, config)
+        log("Deploy completed in \(formatDuration(since: deployStarted)).")
+
+        let syndicationStarted = Date()
         let result = await syndicate(root, config)
+        log("Syndication completed in \(formatDuration(since: syndicationStarted)). Published: \(result.published). Failed: \(result.failed).")
         if result.changed {
+            let rebuildStarted = Date()
             try build(root, config)
+            log("Post-syndication rebuild completed in \(formatDuration(since: rebuildStarted)).")
+            let redeployStarted = Date()
             try await deploy(root, config)
+            log("Post-syndication redeploy completed in \(formatDuration(since: redeployStarted)).")
+            let commitStarted = Date()
             try commit(root)
+            log("Syndication commit completed in \(formatDuration(since: commitStarted)).")
         }
+        log("Publish completed in \(formatDuration(since: publishStarted)).")
         return result
     }
 
@@ -71,5 +89,13 @@ public enum Publish {
         try process.run()
         process.waitUntilExit()
         return process.terminationStatus
+    }
+
+    private static func formatDuration(since start: Date) -> String {
+        let seconds = Date().timeIntervalSince(start)
+        if seconds < 10 {
+            return String(format: "%.2fs", seconds)
+        }
+        return String(format: "%.1fs", seconds)
     }
 }

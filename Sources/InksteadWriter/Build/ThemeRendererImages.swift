@@ -218,15 +218,54 @@ extension ThemeRenderer {
         guard shouldProcess else {
             return try Data(contentsOf: source)
         }
+        let sourceData = try Data(contentsOf: source)
+        let cacheURL = plumeImageVariantCacheURL(
+            source: source,
+            sourceData: sourceData,
+            maxWidth: maxWidth,
+            maxHeight: maxHeight,
+            options: options
+        )
+        if let cached = try? Data(contentsOf: cacheURL), !cached.isEmpty {
+            return cached
+        }
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent("inkstead-writer-plume-asset-\(UUID().uuidString).\(source.pathExtension)")
         defer { try? FileManager.default.removeItem(at: temp) }
-        try FileManager.default.copyItem(at: source, to: temp)
+        try sourceData.write(to: temp, options: .atomic)
         try ImageEncoder.optimizeImage(at: temp, options: ImageOptimizationOptions(
             enabled: true,
             maxWidth: maxWidth ?? options.maxWidth,
             maxHeight: maxHeight ?? options.maxHeight,
             quality: options.quality
         ))
-        return try Data(contentsOf: temp)
+        let optimized = try Data(contentsOf: temp)
+        try FileManager.default.createDirectory(at: cacheURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try optimized.write(to: cacheURL, options: .atomic)
+        return optimized
+    }
+
+    private func plumeImageVariantCacheURL(
+        source: URL,
+        sourceData: Data,
+        maxWidth: Int?,
+        maxHeight: Int?,
+        options: ImageOptimizationOptions
+    ) -> URL {
+        let key = [
+            source.standardizedFileURL.path,
+            SHA256.hex(sourceData),
+            maxWidth.map(String.init) ?? "",
+            maxHeight.map(String.init) ?? "",
+            String(options.maxWidth),
+            String(options.maxHeight),
+            String(options.quality),
+            source.pathExtension.lowercased()
+        ].joined(separator: "\u{1F}")
+        let hash = SHA256.hex(Data(key.utf8))
+        return InksteadWriterReleaseResolver.cacheRoot()
+            .appendingPathComponent("media")
+            .appendingPathComponent("plume-v1")
+            .appendingPathComponent(String(hash.prefix(2)))
+            .appendingPathComponent("\(hash).\(source.pathExtension.lowercased())")
     }
 }

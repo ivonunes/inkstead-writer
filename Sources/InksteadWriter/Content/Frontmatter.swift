@@ -1,6 +1,6 @@
 import Foundation
 
-public enum FrontmatterValue: Equatable {
+public enum FrontmatterValue: Equatable, Sendable {
     case string(String)
     case bool(Bool)
     case number(Double)
@@ -39,7 +39,7 @@ public enum FrontmatterValue: Equatable {
     }
 }
 
-public struct ParsedMarkdown: Equatable {
+public struct ParsedMarkdown: Equatable, Sendable {
     public var path: URL
     public var slug: String
     public var frontmatter: [String: FrontmatterValue]

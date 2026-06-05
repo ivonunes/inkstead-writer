@@ -39,7 +39,7 @@ struct InksteadWriterCLI {
                 }
             case "build":
                 let config = try ConfigLoader.load(root: root)
-                try SiteBuilder.build(root: root, config: config)
+                try SiteBuilder.build(root: root, config: config, log: { print($0) })
                 print(TerminalStyle.green("Built site to \(config.build?.output ?? "dist")."))
             case "cache":
                 try runCache(root: root, arguments: arguments)

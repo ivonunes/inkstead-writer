@@ -122,7 +122,7 @@ final class InitAndPostTests: XCTestCase {
         XCTAssertTrue(github.content.contains("actions/cache@v5"))
         XCTAssertTrue(github.content.contains("id: writer_version"))
         XCTAssertTrue(github.content.contains("inkstead-writer-bin-${{ runner.os }}-${{ steps.writer_version.outputs.version }}"))
-        XCTAssertTrue(github.content.contains("inkstead-writer-data-${{ runner.os }}-${{ hashFiles('inkstead-writer.json') }}"))
+        XCTAssertTrue(github.content.contains("inkstead-writer-data-${{ runner.os }}-${{ hashFiles('inkstead-writer.json', 'content/media/**') }}"))
         XCTAssertFalse(github.content.contains("./inkstead-writer cache clean"))
         XCTAssertTrue(gitlab.content.contains("XDG_CACHE_HOME"))
         XCTAssertTrue(gitlab.content.contains("./inkstead-writer cache clean"))

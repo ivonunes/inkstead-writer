@@ -67,6 +67,10 @@ final class ImageOptimizationTests: XCTestCase {
 
         let sentinel = Data("cached optimized image".utf8)
         try sentinel.write(to: cachedFiles[0], options: .atomic)
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSince1970: 4_102_444_800)],
+            ofItemAtPath: sourceImage.path
+        )
         try FileManager.default.removeItem(at: outputMedia)
 
         try ImageOptimizer.copyOptimizedMedia(from: sourceMedia, to: outputMedia, config: config, cacheRoot: cache)
