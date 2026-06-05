@@ -143,14 +143,14 @@ public enum AdapterSupport {
                 cache:
                   key: "inkstead-writer-$CI_COMMIT_REF_SLUG"
                   paths:
-                    - .cache/inkstead-writer/media/
-                    - .cache/inkstead-writer/data/
+                    - .cache/inkstead-writer/
                 before_script:
                   - apt-get update
                   - apt-get install -y --no-install-recommends ca-certificates curl tar
                 pages:
                   script:
                     - ./inkstead-writer publish
+                    - ./inkstead-writer cache clean
                   artifacts:
                     paths:
                       - \(config.build?.output ?? "dist")
@@ -164,14 +164,14 @@ public enum AdapterSupport {
             cache:
               key: "inkstead-writer-$CI_COMMIT_REF_SLUG"
               paths:
-                - .cache/inkstead-writer/media/
-                - .cache/inkstead-writer/data/
+                - .cache/inkstead-writer/
             before_script:
               - apt-get update
               - apt-get install -y --no-install-recommends ca-certificates curl tar
             publish:
               script:
                 - ./inkstead-writer publish
+                - ./inkstead-writer cache clean
             """)
         case .forgejoActions:
             return GeneratedFile(path: ".forgejo/workflows/publish.yml", content: """
@@ -186,9 +186,7 @@ public enum AdapterSupport {
                   - uses: actions/checkout@v6
                   - uses: actions/cache@v5
                     with:
-                      path: |
-                        ~/.cache/inkstead-writer/media
-                        ~/.cache/inkstead-writer/data
+                      path: ~/.cache/inkstead-writer
                       key: inkstead-writer-${{ runner.os }}-${{ hashFiles('inkstead-writer.json') }}
                       restore-keys: |
                         inkstead-writer-${{ runner.os }}-
@@ -197,6 +195,7 @@ public enum AdapterSupport {
                       apt-get update
                       apt-get install -y --no-install-recommends ca-certificates curl tar
                   - run: ./inkstead-writer publish
+                  - run: ./inkstead-writer cache clean
             """)
         }
     }
@@ -204,14 +203,27 @@ public enum AdapterSupport {
     private static func githubInksteadCacheSteps() -> String {
         """
 
+              - name: Read Inkstead Writer version
+                id: writer_version
+                run: |
+                  version="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' inkstead-writer.json | head -n 1)"
+                  if [ -z "$version" ]; then
+                    echo "Could not read Inkstead Writer version from inkstead-writer.json." >&2
+                    exit 1
+                  fi
+                  echo "version=$version" >> "$GITHUB_OUTPUT"
+              - uses: actions/cache@v5
+                with:
+                  path: ~/.cache/inkstead-writer/v${{ steps.writer_version.outputs.version }}
+                  key: inkstead-writer-bin-${{ runner.os }}-${{ steps.writer_version.outputs.version }}
               - uses: actions/cache@v5
                 with:
                   path: |
                     ~/.cache/inkstead-writer/media
                     ~/.cache/inkstead-writer/data
-                  key: inkstead-writer-${{ runner.os }}-${{ hashFiles('inkstead-writer.json') }}
+                  key: inkstead-writer-data-${{ runner.os }}-${{ hashFiles('inkstead-writer.json') }}
                   restore-keys: |
-                    inkstead-writer-${{ runner.os }}-
+                    inkstead-writer-data-${{ runner.os }}-
         """
     }
 

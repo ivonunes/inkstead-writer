@@ -289,11 +289,11 @@ final class SyndicationTests: XCTestCase {
         XCTAssertEqual(multipartField("oauth_nonce", in: uploadBody), "nonce")
         XCTAssertEqual(multipartField("oauth_timestamp", in: uploadBody), "1700000000")
         XCTAssertEqual(multipartField("oauth_signature_method", in: uploadBody), "HMAC-SHA1")
-        XCTAssertEqual(multipartField("title", in: uploadBody), "photo.jpg")
-        XCTAssertEqual(multipartField("oauth_signature", in: uploadBody), "8fo31wA2vD/E4NpH0KvFVVex/Hk=")
+        XCTAssertEqual(multipartField("title", in: uploadBody), "")
+        XCTAssertEqual(multipartField("oauth_signature", in: uploadBody), "KGYgMhiOnSj1+CamidZ3F2fVKU4=")
     }
 
-    func testFlickrUsesPhotoFilenameWhenPhotoNoteHasNoTextTitle() async throws {
+    func testFlickrLeavesTitleBlankWhenPhotoNoteHasNoTitle() async throws {
         let root = try TemporaryDirectory()
         try FileManager.default.createDirectory(at: root.url.appendingPathComponent("content/posts"), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: root.url.appendingPathComponent("content/media"), withIntermediateDirectories: true)
@@ -322,8 +322,47 @@ final class SyndicationTests: XCTestCase {
         let result = await SyndicationProviders.publish(.flickr, post: post, context: context)
 
         XCTAssertEqual(result.status, .published)
-        XCTAssertTrue(uploadBody.contains(#"name="title""#))
-        XCTAssertTrue(uploadBody.contains("photo.jpg"))
+        XCTAssertEqual(multipartField("title", in: uploadBody), "")
+    }
+
+    func testFlickrUsesPlainTextCaptionForTitleAndDescription() async throws {
+        let post = try samplePhotoPost(body: "Cat. ![Image](/media/photo.jpg)", extension: "jpg", data: Data("fake image".utf8), alt: nil)
+        var uploadBody = ""
+        let context = SyndicationContext(root: post.path.deletingLastPathComponent(), env: [
+            "FLICKR_API_KEY": "key",
+            "FLICKR_API_SECRET": "secret",
+            "FLICKR_ACCESS_TOKEN": "token",
+            "FLICKR_ACCESS_SECRET": "access"
+        ]) { request in
+            uploadBody = String(data: request.httpBody ?? Data(), encoding: .utf8) ?? ""
+            return HTTPResponse(statusCode: 200, body: Data(#"<rsp stat="ok"><photoid>123</photoid></rsp>"#.utf8))
+        }
+
+        let result = await SyndicationProviders.publish(.flickr, post: post, context: context)
+
+        XCTAssertEqual(result.status, .published)
+        XCTAssertEqual(multipartField("title", in: uploadBody), "")
+        XCTAssertEqual(multipartField("description", in: uploadBody), "Cat.")
+    }
+
+    func testFlickrUsesPostTitleWhenPhotoNoteHasTitle() async throws {
+        let post = try samplePhotoPost(title: "Cat Photo", body: "Cat. ![Image](/media/photo.jpg)", extension: "jpg", data: Data("fake image".utf8), alt: nil)
+        var uploadBody = ""
+        let context = SyndicationContext(root: post.path.deletingLastPathComponent(), env: [
+            "FLICKR_API_KEY": "key",
+            "FLICKR_API_SECRET": "secret",
+            "FLICKR_ACCESS_TOKEN": "token",
+            "FLICKR_ACCESS_SECRET": "access"
+        ]) { request in
+            uploadBody = String(data: request.httpBody ?? Data(), encoding: .utf8) ?? ""
+            return HTTPResponse(statusCode: 200, body: Data(#"<rsp stat="ok"><photoid>123</photoid></rsp>"#.utf8))
+        }
+
+        let result = await SyndicationProviders.publish(.flickr, post: post, context: context)
+
+        XCTAssertEqual(result.status, .published)
+        XCTAssertEqual(multipartField("title", in: uploadBody), "Cat Photo")
+        XCTAssertEqual(multipartField("description", in: uploadBody), "Cat.")
     }
 
     func testSyndicateSiteUpdatesFrontmatterAndSkipsAlreadyPublishedTargets() async throws {
@@ -386,7 +425,7 @@ final class SyndicationTests: XCTestCase {
         return try XCTUnwrap(ContentLoader.loadPosts(root: root.url, config: config).first)
     }
 
-    private func samplePhotoPost(body: String, extension pathExtension: String, data: Data, alt: String?) throws -> NormalizedPost {
+    private func samplePhotoPost(title: String? = nil, body: String, extension pathExtension: String, data: Data, alt: String?) throws -> NormalizedPost {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("inkstead-writer-swift-\(UUID().uuidString)")
         addTeardownBlock {
             try? FileManager.default.removeItem(at: root)
@@ -395,9 +434,11 @@ final class SyndicationTests: XCTestCase {
         try FileManager.default.createDirectory(at: root.appendingPathComponent("content/media"), withIntermediateDirectories: true)
         let filename = "photo.\(pathExtension)"
         try data.write(to: root.appendingPathComponent("content/media/\(filename)"))
+        let titleLine = title.map { "title: \"\($0)\"\n" } ?? ""
         let altLine = alt.map { "alt: \"\($0)\"\n" } ?? ""
         try """
         ---
+        \(titleLine)\
         date: 2026-05-10T18:30:00+01:00
         \(altLine)photos:
           - /media/\(filename)

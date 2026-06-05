@@ -79,6 +79,52 @@ final class DeployTests: XCTestCase {
         XCTAssertEqual(requests.count, 3)
     }
 
+    func testCloudflareDeployDeduplicatesIdenticalAssetHashes() async throws {
+        let root = try TemporaryDirectory()
+        try FileManager.default.createDirectory(at: root.url.appendingPathComponent("dist"), withIntermediateDirectories: true)
+        try "<h1>Gone</h1>".write(to: root.url.appendingPathComponent("dist/index.html"), atomically: true, encoding: .utf8)
+        try "<h1>Gone</h1>".write(to: root.url.appendingPathComponent("dist/404.html"), atomically: true, encoding: .utf8)
+        let config = InksteadWriterConfig(
+            site: SiteConfig(title: "My Website", url: "https://example.com", author: "Your Name"),
+            deploy: DeployConfig(provider: .cloudflareWorkers, projectName: "my-worker")
+        )
+        var requests: [URLRequest] = []
+        var sharedHash = ""
+
+        try await Deploy.deploySite(
+            root: root.url,
+            config: config,
+            env: ["CLOUDFLARE_ACCOUNT_ID": "account-id", "CLOUDFLARE_API_TOKEN": "api-token"],
+            http: { request in
+                requests.append(request)
+                switch request.url?.path {
+                case "/client/v4/accounts/account-id/workers/scripts/my-worker/assets-upload-session":
+                    let body = try XCTUnwrap(request.httpBody)
+                    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+                    let manifest = try XCTUnwrap(json["manifest"] as? [String: [String: Any]])
+                    let indexHash = try XCTUnwrap(manifest["/index.html"]?["hash"] as? String)
+                    let notFoundHash = try XCTUnwrap(manifest["/404.html"]?["hash"] as? String)
+                    XCTAssertEqual(indexHash, notFoundHash)
+                    sharedHash = indexHash
+                    return HTTPResponse(statusCode: 200, body: Data(#"{"success":true,"result":{"jwt":"upload-token","buckets":[["\#(indexHash)"]]}}"#.utf8))
+                case "/client/v4/accounts/account-id/workers/assets/upload":
+                    let body = String(decoding: request.httpBody ?? Data(), as: UTF8.self)
+                    XCTAssertEqual(body.components(separatedBy: #"name="\#(sharedHash)""#).count - 1, 1)
+                    XCTAssertTrue(body.contains("PGgxPkdvbmU8L2gxPg=="))
+                    return HTTPResponse(statusCode: 201, body: Data(#"{"success":true,"result":{"jwt":"completion-token"}}"#.utf8))
+                case "/client/v4/accounts/account-id/workers/scripts/my-worker":
+                    return HTTPResponse(statusCode: 200, body: Data(#"{"success":true,"result":{"id":"my-worker"}}"#.utf8))
+                default:
+                    XCTFail("Unexpected Cloudflare request: \(request.url?.absoluteString ?? "nil")")
+                    return HTTPResponse(statusCode: 404)
+                }
+            },
+            run: { _, _ in XCTFail("Cloudflare deploy should use the API, not an external CLI.") }
+        )
+
+        XCTAssertEqual(requests.count, 3)
+    }
+
     func testNetlifyRequiresEnvAndPostsZipToApi() async throws {
         let root = try TemporaryDirectory()
         try FileManager.default.createDirectory(at: root.url.appendingPathComponent("dist/assets"), withIntermediateDirectories: true)

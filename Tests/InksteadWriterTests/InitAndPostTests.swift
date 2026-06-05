@@ -114,15 +114,20 @@ final class InitAndPostTests: XCTestCase {
         )))
         for workflow in [github.content, gitlab.content, forgejo.content] {
             XCTAssertTrue(workflow.contains("./inkstead-writer publish"))
-            XCTAssertTrue(workflow.contains("inkstead-writer/media"))
-            XCTAssertTrue(workflow.contains("inkstead-writer/data"))
+            XCTAssertTrue(workflow.contains(".cache/inkstead-writer"))
             XCTAssertFalse(workflow.contains("releases/download"))
             XCTAssertFalse(workflow.contains("npm"))
         }
         XCTAssertTrue(github.content.contains("permissions:\n  contents: write"))
         XCTAssertTrue(github.content.contains("actions/cache@v5"))
+        XCTAssertTrue(github.content.contains("id: writer_version"))
+        XCTAssertTrue(github.content.contains("inkstead-writer-bin-${{ runner.os }}-${{ steps.writer_version.outputs.version }}"))
+        XCTAssertTrue(github.content.contains("inkstead-writer-data-${{ runner.os }}-${{ hashFiles('inkstead-writer.json') }}"))
+        XCTAssertFalse(github.content.contains("./inkstead-writer cache clean"))
         XCTAssertTrue(gitlab.content.contains("XDG_CACHE_HOME"))
+        XCTAssertTrue(gitlab.content.contains("./inkstead-writer cache clean"))
         XCTAssertTrue(forgejo.content.contains("actions/cache@v5"))
+        XCTAssertTrue(forgejo.content.contains("./inkstead-writer cache clean"))
     }
 
     func testGeneratedGitHubWorkflowInstallsNodeWhenHooksUseNPM() throws {

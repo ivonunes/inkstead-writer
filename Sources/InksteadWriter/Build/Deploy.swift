@@ -84,7 +84,7 @@ public enum Deploy {
         let buckets = result?["buckets"] as? [[String]] ?? []
         let completionJWT = try await uploadCloudflareAssets(
             buckets: buckets,
-            assetsByHash: Dictionary(uniqueKeysWithValues: assets.map { ($0.hash, $0) }),
+            assetsByHash: try cloudflareAssetsByHash(assets),
             uploadJWT: uploadJWT,
             accountID: accountID,
             http: http
@@ -128,6 +128,20 @@ public enum Deploy {
             throw InksteadWriterError.io("Cloudflare asset upload did not return a completion token.")
         }
         return completionJWT
+    }
+
+    private static func cloudflareAssetsByHash(_ assets: [CloudflareAsset]) throws -> [String: CloudflareAsset] {
+        var output: [String: CloudflareAsset] = [:]
+        for asset in assets {
+            if let existing = output[asset.hash] {
+                if existing.bytes != asset.bytes || existing.contentType != asset.contentType {
+                    throw InksteadWriterError.io("Cloudflare asset hash collision for \(asset.hash).")
+                }
+                continue
+            }
+            output[asset.hash] = asset
+        }
+        return output
     }
 
     private static func uploadCloudflareWorker(accountID: String, apiToken: String, scriptName: String, completionJWT: String, http: @escaping HTTPClient) async throws {

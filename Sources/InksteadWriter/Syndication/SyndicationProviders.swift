@@ -222,11 +222,10 @@ public enum SyndicationProviders {
             "oauth_token": accessToken,
             "oauth_version": "1.0"
         ]
-        let body = post.parsed.body.trimmingCharacters(in: .whitespacesAndNewlines)
-        let fallbackTitle = body.isEmpty ? URL(fileURLWithPath: photoPath).lastPathComponent : String(body.prefix(80))
+        let text = SyndicationText.markdownToText(post.parsed.body)
         var params = oauth
-        params["title"] = post.title ?? fallbackTitle
-        params["description"] = body
+        params["title"] = post.title ?? ""
+        params["description"] = text
         params["oauth_signature"] = oauthSignature(method: "POST", url: uploadURL, params: params, apiSecret: apiSecret, accessSecret: accessSecret)
 
         let bytes = try Data(contentsOf: URL(fileURLWithPath: photoPath))
