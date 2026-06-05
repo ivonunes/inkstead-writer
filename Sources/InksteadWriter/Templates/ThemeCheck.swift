@@ -288,6 +288,11 @@ public enum ThemeChecker {
                 ["type": "application/feed+json", "title": "\(config.site.title) JSON Feed", "href": "/feed.json"]
             ]
         ]
+        let notFound: [String: Any] = [
+            "title": "Page not found",
+            "description": "The page you requested could not be found.",
+            "message": "The page you requested could not be found."
+        ]
 
         return [
             "title": config.site.title,
@@ -321,6 +326,7 @@ public enum ThemeChecker {
             "page": samplePage,
             "category": sampleCategory,
             "pagination": pagination,
+            "notFound": notFound,
             "feed": sampleFeed,
             "meta": meta,
             "content": PlumeSafeHTML("<main>Sample content</main>"),

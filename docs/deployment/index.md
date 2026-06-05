@@ -6,6 +6,8 @@ Choose a deployment target during `inkstead-writer init`, or change it later in 
 
 Some deployment adapters require a matching CI adapter. Inkstead Writer validates adapter combinations when it loads `inkstead-writer.json`.
 
+Writer builds a custom not-found page at `dist/404.html`. Cloudflare Workers deployments serve that file through asset binding 404 handling, and Pages-style static hosts such as Cloudflare Pages, GitHub Pages, and Forgejo Pages include it in their uploaded artifact.
+
 ## Before Publishing
 
 When you are ready to publish, check the deployment requirements:

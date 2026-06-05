@@ -13,6 +13,7 @@ theme/
   layouts/
     default.plume
   pages/
+    404.plume
     home.plume
     category.plume
     post.plume
@@ -33,6 +34,7 @@ All files are optional. Writer falls back to the built-in template when an overr
 
 Writer looks for these page templates under `theme/pages`:
 
+- `404.plume` for the not-found page written to `/404.html`.
 - `home.plume` for the homepage.
 - `category.plume` for category indexes.
 - `post.plume` for posts.
@@ -58,6 +60,8 @@ theme/pages/photos.plume
   }
 </div>
 ```
+
+The not-found page receives a `notFound` object with `title`, `description`, and `message` fields. Writer always writes it to `dist/404.html`, so static hosts such as Cloudflare Pages, GitHub Pages, and Pages-style Forgejo deployments can serve it as their custom 404 page. Cloudflare Workers deployments use the same file through the asset binding 404 handling.
 
 ## Plume In Writer
 
@@ -249,6 +253,7 @@ Templates receive:
 - `post` on post pages
 - `page` on page pages
 - `category` on category pages
+- `notFound` on the 404 page
 - `meta`
 - `now`, including `now.year`
 

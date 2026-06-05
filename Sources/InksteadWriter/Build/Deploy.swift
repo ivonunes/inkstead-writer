@@ -202,13 +202,14 @@ public enum Deploy {
 
     private static func cloudflareAssets(in distDir: URL) throws -> [CloudflareAsset] {
         try ZipArchive.entries(in: distDir).map { entry in
+            let contentType = DevSupport.contentType(for: entry.name)
             let pathExtension = URL(fileURLWithPath: entry.name).pathExtension
-            let hashInput = Data((entry.bytes.base64EncodedString() + pathExtension).utf8)
+            let hashInput = Data((entry.bytes.base64EncodedString() + pathExtension + contentType).utf8)
             return CloudflareAsset(
                 path: entry.name,
                 hash: String(SHA256.hex(hashInput).prefix(32)),
                 bytes: entry.bytes,
-                contentType: DevSupport.contentType(for: entry.name)
+                contentType: contentType
             )
         }
     }

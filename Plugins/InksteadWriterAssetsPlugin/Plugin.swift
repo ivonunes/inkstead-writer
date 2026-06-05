@@ -14,6 +14,7 @@ struct InksteadWriterAssetsPlugin: BuildToolPlugin {
             ("defaultThemeCategoryPlume", "Sources/InksteadWriter/Templates/DefaultTheme/category.plume"),
             ("defaultThemePostPlume", "Sources/InksteadWriter/Templates/DefaultTheme/post.plume"),
             ("defaultThemePagePlume", "Sources/InksteadWriter/Templates/DefaultTheme/page.plume"),
+            ("defaultThemeNotFoundPlume", "Sources/InksteadWriter/Templates/DefaultTheme/404.plume"),
             ("defaultThemeFeedXMLPlume", "Sources/InksteadWriter/Templates/DefaultTheme/feed.xml.plume"),
             ("defaultThemeFeedJSONPlume", "Sources/InksteadWriter/Templates/DefaultTheme/feed.json.plume"),
             ("defaultComponentCategoriesPlume", "Sources/InksteadWriter/Templates/DefaultTheme/components/Categories.plume"),

@@ -87,6 +87,20 @@ final class ThemeCheckTests: XCTestCase {
         XCTAssertTrue(result.checkedFiles.contains("theme/feed.json.plume"))
     }
 
+    func testChecksNotFoundTemplateWithSampleContext() throws {
+        let root = try TemporaryDirectory()
+        try FileManager.default.createDirectory(at: root.url.appendingPathComponent("theme/pages"), withIntermediateDirectories: true)
+        try """
+        <h1>{notFound.title}</h1>
+        <p>{notFound.message}</p>
+        """.write(to: root.url.appendingPathComponent("theme/pages/404.plume"), atomically: true, encoding: .utf8)
+
+        let result = try ThemeChecker.check(root: root.url, config: testConfig())
+
+        XCTAssertTrue(result.passed)
+        XCTAssertTrue(result.checkedFiles.contains("theme/pages/404.plume"))
+    }
+
     func testReportsThemeCheckIssues() throws {
         let root = try TemporaryDirectory()
         try FileManager.default.createDirectory(at: root.url.appendingPathComponent("theme"), withIntermediateDirectories: true)

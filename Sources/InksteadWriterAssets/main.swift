@@ -78,7 +78,7 @@ output += "\n"
 
 output += """
 
-    static let defaultTemplateNames = ["layout", "home", "category", "post", "page", "feed.xml", "feed.json"]
+    static let defaultTemplateNames = ["layout", "home", "category", "post", "page", "404", "feed.xml", "feed.json"]
 
     static let defaultTemplates = [
         "layout": defaultThemeLayoutPlume,
@@ -86,6 +86,7 @@ output += """
         "category": defaultThemeCategoryPlume,
         "post": defaultThemePostPlume,
         "page": defaultThemePagePlume,
+        "404": defaultThemeNotFoundPlume,
         "feed.xml": defaultThemeFeedXMLPlume,
         "feed.json": defaultThemeFeedJSONPlume
     ]

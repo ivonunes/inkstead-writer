@@ -162,6 +162,22 @@ struct ThemeRenderer: @unchecked Sendable {
             ])
     }
 
+    func notFound() throws -> String {
+        let title = "Page not found"
+        let description = "The page you requested could not be found."
+        return try renderBody(
+            "404",
+            context: [
+                "title": title,
+                "notFound": [
+                    "title": title,
+                    "description": description,
+                    "message": description
+                ],
+                "meta": meta(title: title, canonicalUrl: "", description: description, feeds: [])
+            ])
+    }
+
     func renderBody(_ template: String, context: [String: Any]) throws -> String {
         var fullContext = baseContext()
         for (key, value) in context {

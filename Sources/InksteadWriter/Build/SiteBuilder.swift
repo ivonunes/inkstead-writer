@@ -72,6 +72,7 @@ public enum SiteBuilder {
             try write(try renderer.page(page), to: dist.appendingPathComponent("\(page.urlPath.trimmingCharacters(in: CharacterSet(charactersIn: "/")))/index.html"))
         }
 
+        try write(try renderer.notFound(), to: dist.appendingPathComponent("404.html"))
         try write(try renderer.xmlFeed(posts: posts), to: dist.appendingPathComponent("feed.xml"))
         try write(try renderer.jsonFeed(posts: posts), to: dist.appendingPathComponent("feed.json"))
         let sitemapUrls = [config.site.url] + posts.map(\.canonicalUrl) + pages.map(\.canonicalUrl) + categories.map { "\(config.site.url.replacingOccurrences(of: #"/$"#, with: "", options: .regularExpression))\($0.urlPath)" }

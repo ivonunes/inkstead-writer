@@ -13,6 +13,7 @@ final class ThemeEjectTests: XCTestCase {
         XCTAssertTrue(result.copied.contains("theme/pages/feed.xml.plume"))
         XCTAssertTrue(result.copied.contains("theme/pages/feed.json.plume"))
         XCTAssertTrue(result.copied.contains("theme/pages/post.plume"))
+        XCTAssertTrue(result.copied.contains("theme/pages/404.plume"))
         XCTAssertTrue(result.skipped.contains("theme/pages/home.plume"))
         XCTAssertEqual(try String(contentsOf: root.url.appendingPathComponent("theme/pages/home.plume"), encoding: .utf8), "Custom home")
 

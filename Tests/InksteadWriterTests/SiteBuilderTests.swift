@@ -91,6 +91,39 @@ final class SiteBuilderTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.url.appendingPathComponent("dist/sitemap.xml").path))
     }
 
+    func testBuildWritesDefaultAndCustomNotFoundPage() throws {
+        let root = try TemporaryDirectory()
+        try FileManager.default.createDirectory(at: root.url.appendingPathComponent("content/posts"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.url.appendingPathComponent("content/pages"), withIntermediateDirectories: true)
+        try """
+        {
+          "inkstead": { "version": "2.0.0" },
+          "site": { "title": "My Website", "url": "https://example.com", "author": "Your Name" }
+        }
+        """.write(to: root.url.appendingPathComponent("inkstead.json"), atomically: true, encoding: .utf8)
+
+        let config = try ConfigLoader.load(root: root.url)
+        try SiteBuilder.build(root: root.url, config: config)
+
+        let defaultNotFound = try String(contentsOf: root.url.appendingPathComponent("dist/404.html"), encoding: .utf8)
+        XCTAssertTrue(defaultNotFound.contains("Page not found"))
+        XCTAssertTrue(defaultNotFound.contains("Return home"))
+
+        try FileManager.default.createDirectory(at: root.url.appendingPathComponent("theme/pages"), withIntermediateDirectories: true)
+        try """
+        <section class="custom-404">
+          <h1>{notFound.title}</h1>
+          <p>Custom missing page</p>
+        </section>
+        """.write(to: root.url.appendingPathComponent("theme/pages/404.plume"), atomically: true, encoding: .utf8)
+
+        try SiteBuilder.build(root: root.url, config: config)
+
+        let customNotFound = try String(contentsOf: root.url.appendingPathComponent("dist/404.html"), encoding: .utf8)
+        XCTAssertTrue(customNotFound.contains(#"class="custom-404""#))
+        XCTAssertTrue(customNotFound.contains("Custom missing page"))
+    }
+
     func testCanHidePoweredByFooterLink() throws {
         let root = try TemporaryDirectory()
         try FileManager.default.createDirectory(at: root.url.appendingPathComponent("content/posts"), withIntermediateDirectories: true)

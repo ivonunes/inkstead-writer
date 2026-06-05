@@ -39,6 +39,9 @@ final class DeployTests: XCTestCase {
                     XCTAssertNotNil(manifest["/assets/site.css"])
                     let htmlHash = try XCTUnwrap(manifest["/index.html"]?["hash"] as? String)
                     let cssHash = try XCTUnwrap(manifest["/assets/site.css"]?["hash"] as? String)
+                    let oldHTMLHashInput = Data((Data("<h1>Hello</h1>".utf8).base64EncodedString() + "html").utf8)
+                    let oldHTMLHash = String(SHA256.hex(oldHTMLHashInput).prefix(32))
+                    XCTAssertNotEqual(htmlHash, oldHTMLHash)
                     uploadedHTMLHash = htmlHash
                     uploadedCSSHash = cssHash
                     return HTTPResponse(statusCode: 200, body: Data(#"{"success":true,"result":{"jwt":"upload-token","buckets":[["\#(htmlHash)","\#(cssHash)"]]}}"#.utf8))

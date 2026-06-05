@@ -1,0 +1,5 @@
+<article class="page-content not-found">
+  <h1>{notFound.title}</h1>
+  <p>{notFound.message}</p>
+  <p><a href="/">Return home</a></p>
+</article>
