@@ -104,17 +104,12 @@ public enum Deploy {
         }
         var completionJWT: String?
         for bucket in buckets {
-            var payload: [String: String] = [:]
+            var form = HTTPMultipartForm()
             for hash in bucket {
                 guard let asset = assetsByHash[hash] else {
                     throw InksteadWriterError.io("Cloudflare requested unknown asset hash \(hash).")
                 }
-                payload[hash] = asset.bytes.base64EncodedString()
-            }
-            var form = HTTPMultipartForm()
-            for hash in bucket {
-                guard let value = payload[hash] else { continue }
-                form.addField(name: hash, value: value)
+                form.addField(name: hash, value: asset.bytes.base64EncodedString(), contentType: asset.contentType)
             }
             let response = try await sendJSON(
                 URLRequest.cloudflare(
@@ -212,7 +207,8 @@ public enum Deploy {
             return CloudflareAsset(
                 path: entry.name,
                 hash: String(SHA256.hex(hashInput).prefix(32)),
-                bytes: entry.bytes
+                bytes: entry.bytes,
+                contentType: DevSupport.contentType(for: entry.name)
             )
         }
     }
@@ -259,6 +255,7 @@ private struct CloudflareAsset {
     var path: String
     var hash: String
     var bytes: Data
+    var contentType: String
 }
 
 private extension URLRequest {

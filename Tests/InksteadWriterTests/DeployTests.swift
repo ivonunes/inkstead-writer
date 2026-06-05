@@ -19,7 +19,8 @@ final class DeployTests: XCTestCase {
             deploy: DeployConfig(provider: .cloudflareWorkers, projectName: "my-worker")
         )
         var requests: [URLRequest] = []
-        var uploadedHash: String?
+        var uploadedHTMLHash: String?
+        var uploadedCSSHash: String?
 
         try await Deploy.deploySite(
             root: root.url,
@@ -36,18 +37,25 @@ final class DeployTests: XCTestCase {
                     let manifest = try XCTUnwrap(json["manifest"] as? [String: [String: Any]])
                     XCTAssertNotNil(manifest["/index.html"])
                     XCTAssertNotNil(manifest["/assets/site.css"])
-                    let hash = try XCTUnwrap(manifest["/index.html"]?["hash"] as? String)
-                    uploadedHash = hash
-                    return HTTPResponse(statusCode: 200, body: Data(#"{"success":true,"result":{"jwt":"upload-token","buckets":[["\#(hash)"]]}}"#.utf8))
+                    let htmlHash = try XCTUnwrap(manifest["/index.html"]?["hash"] as? String)
+                    let cssHash = try XCTUnwrap(manifest["/assets/site.css"]?["hash"] as? String)
+                    uploadedHTMLHash = htmlHash
+                    uploadedCSSHash = cssHash
+                    return HTTPResponse(statusCode: 200, body: Data(#"{"success":true,"result":{"jwt":"upload-token","buckets":[["\#(htmlHash)","\#(cssHash)"]]}}"#.utf8))
                 case "/client/v4/accounts/account-id/workers/assets/upload":
                     XCTAssertEqual(request.url?.query, "base64=true")
                     XCTAssertEqual(request.httpMethod, "POST")
                     XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer upload-token")
                     let body = try XCTUnwrap(request.httpBody)
                     XCTAssertNil(body.range(of: Data(#"name="body""#.utf8)))
-                    XCTAssertNotNil(body.range(of: Data(#"name="\#(uploadedHash ?? "")""#.utf8)))
-                    XCTAssertNotNil(body.range(of: Data((uploadedHash ?? "").utf8)))
+                    XCTAssertNotNil(body.range(of: Data(#"name="\#(uploadedHTMLHash ?? "")""#.utf8)))
+                    XCTAssertNotNil(body.range(of: Data(#"name="\#(uploadedCSSHash ?? "")""#.utf8)))
+                    XCTAssertNotNil(body.range(of: Data((uploadedHTMLHash ?? "").utf8)))
+                    XCTAssertNotNil(body.range(of: Data((uploadedCSSHash ?? "").utf8)))
+                    XCTAssertNotNil(body.range(of: Data("Content-Type: text/html; charset=utf-8".utf8)))
+                    XCTAssertNotNil(body.range(of: Data("Content-Type: text/css".utf8)))
                     XCTAssertNotNil(body.range(of: Data("PGgxPkhlbGxvPC9oMT4=".utf8)))
+                    XCTAssertNotNil(body.range(of: Data("Ym9keXt9".utf8)))
                     return HTTPResponse(statusCode: 201, body: Data(#"{"success":true,"result":{"jwt":"completion-token"}}"#.utf8))
                 case "/client/v4/accounts/account-id/workers/scripts/my-worker":
                     XCTAssertEqual(request.httpMethod, "PUT")

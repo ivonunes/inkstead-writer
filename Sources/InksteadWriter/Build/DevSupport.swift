@@ -9,6 +9,13 @@ public enum DevSupport {
         if file.hasSuffix(".xml") { return "application/xml" }
         if file.hasSuffix(".jpg") || file.hasSuffix(".jpeg") { return "image/jpeg" }
         if file.hasSuffix(".png") { return "image/png" }
+        if file.hasSuffix(".webp") { return "image/webp" }
+        if file.hasSuffix(".svg") { return "image/svg+xml" }
+        if file.hasSuffix(".ico") { return "image/x-icon" }
+        if file.hasSuffix(".woff2") { return "font/woff2" }
+        if file.hasSuffix(".woff") { return "font/woff" }
+        if file.hasSuffix(".ttf") { return "font/ttf" }
+        if file.hasSuffix(".txt") { return "text/plain; charset=utf-8" }
         return "application/octet-stream"
     }
 

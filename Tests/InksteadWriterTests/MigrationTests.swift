@@ -174,7 +174,7 @@ final class MigrationTests: XCTestCase {
 
         XCTAssertTrue(plan.actions.contains {
             if case .write("inkstead-writer.json", let content, "migrate TypeScript config to versioned JSON") = $0 {
-                return content.contains(#""version" : "2.0.0""#)
+                return content.contains(#""version" : "\#(InksteadWriterMetadata.currentVersion)""#)
             }
             return false
         })
@@ -204,7 +204,8 @@ final class MigrationTests: XCTestCase {
         let plan = try MigrationPlanner.plan(root: root.url, config: try ConfigLoader.load(root: root.url))
 
         XCTAssertTrue(plan.actions.contains {
-            if case .write("inkstead-writer.json", let content, "record Inkstead Writer version 2.0.0") = $0 {
+            if case .write("inkstead-writer.json", let content, let reason) = $0,
+               reason == "record Inkstead Writer version \(InksteadWriterMetadata.currentVersion)" {
                 return content.contains(#""media" : {"#)
                     && content.contains(#""optimize" : false"#)
                     && !content.contains(#""photos""#)
@@ -243,7 +244,8 @@ final class MigrationTests: XCTestCase {
         let plan = try MigrationPlanner.plan(root: root.url, config: try ConfigLoader.load(root: root.url))
 
         let configWrite = try XCTUnwrap(plan.actions.compactMap { action -> String? in
-            if case .write("inkstead-writer.json", let content, "record Inkstead Writer version 2.0.0") = action {
+            if case .write("inkstead-writer.json", let content, let reason) = action,
+               reason == "record Inkstead Writer version \(InksteadWriterMetadata.currentVersion)" {
                 return content
             }
             return nil
