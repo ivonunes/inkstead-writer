@@ -1,7 +1,6 @@
 import Foundation
-import JPEG
-import JPEGSystem
-import PNG
+import JPEGTurbo
+import PNGCodec
 import WebP
 #if canImport(CoreGraphics) && canImport(ImageIO)
 import CoreGraphics
@@ -439,7 +438,7 @@ enum ImageEncoder {
 
     static func optimizeImage(at url: URL, options: ImageOptimizationOptions) throws {
         let original = try Data(contentsOf: url)
-        if (try? PureSwiftImageEncoder.optimizeImage(at: url, options: options)) == true {
+        if (try? RasterImageEncoder.optimizeImage(at: url, options: options)) == true {
             try keepSmallerImage(at: url, original: original)
             return
         }
@@ -469,11 +468,7 @@ enum ImageEncoder {
     }
 
     static func dimensions(of url: URL) throws -> ImageDimensions? {
-        if ["jpg", "jpeg"].contains(url.pathExtension.lowercased()),
-           let dimensions = try? JPEGHeaderReader.dimensions(of: url) {
-            return dimensions
-        }
-        if let dimensions = try? PureSwiftImageEncoder.dimensions(of: url) {
+        if let dimensions = try? RasterImageEncoder.dimensions(of: url) {
             return dimensions
         }
         #if canImport(CoreGraphics) && canImport(ImageIO)
@@ -486,7 +481,7 @@ enum ImageEncoder {
     static func prepareForSyndication(source: URL, limit: MediaLimit) throws -> PreparedMedia? {
         let maxDimension = limit.maxDimension ?? 4096
         for quality in [88, 82, 76, 70, 64, 58, 52, 46, 40] {
-            if let data = try? PureSwiftImageEncoder.encodeJPEG(source: source, maxWidth: maxDimension, maxHeight: maxDimension, quality: quality) {
+            if let data = try? RasterImageEncoder.encodeJPEG(source: source, maxWidth: maxDimension, maxHeight: maxDimension, quality: quality) {
                 if data.count <= limit.maxBytes {
                     let url = FileManager.default.temporaryDirectory.appendingPathComponent("inkstead-writer-media-\(UUID().uuidString).jpg")
                     try data.write(to: url, options: .atomic)
@@ -606,11 +601,11 @@ private struct DecodedImage {
     }
 }
 
-private enum PureSwiftImageEncoder {
+private enum RasterImageEncoder {
     static func optimizeImage(at url: URL, options: ImageOptimizationOptions) throws -> Bool {
         let ext = url.pathExtension.lowercased()
         if ext == "jpg" || ext == "jpeg" {
-            guard let data = try encodeJPEG(source: url, maxWidth: options.maxWidth, maxHeight: options.maxHeight, quality: options.quality) else {
+            guard let data = try TurboJPEGImageEncoder.encodeJPEG(source: url, maxWidth: options.maxWidth, maxHeight: options.maxHeight, quality: options.quality) else {
                 return false
             }
             try data.write(to: url, options: .atomic)
@@ -636,10 +631,11 @@ private enum PureSwiftImageEncoder {
     static func dimensions(of url: URL) throws -> ImageDimensions? {
         let ext = url.pathExtension.lowercased()
         if ext == "jpg" || ext == "jpeg" {
-            return try decodeJPEG(url).map { ImageDimensions(width: $0.width, height: $0.height) }
+            return try TurboJPEGImageEncoder.dimensions(of: url)
         }
         if ext == "png" {
-            return try decodePNG(url).map { ImageDimensions(width: $0.width, height: $0.height) }
+            let dimensions = try PNGCodec.dimensions(of: [UInt8](Foundation.Data(contentsOf: url)))
+            return ImageDimensions(width: dimensions.width, height: dimensions.height)
         }
         if ext == "webp" {
             return try decodeWebP(url).map { ImageDimensions(width: $0.width, height: $0.height) }
@@ -651,7 +647,7 @@ private enum PureSwiftImageEncoder {
         let ext = source.pathExtension.lowercased()
         let decoded: DecodedImage?
         if ext == "jpg" || ext == "jpeg" {
-            decoded = try decodeJPEG(source)
+            decoded = try TurboJPEGImageEncoder.decode(source)
         } else if ext == "png" {
             decoded = try decodePNG(source)
         } else if ext == "webp" {
@@ -662,20 +658,15 @@ private enum PureSwiftImageEncoder {
         guard let image = decoded?.scaledToFit(maxWidth: maxWidth, maxHeight: maxHeight) else {
             return nil
         }
-        let output = FileManager.default.temporaryDirectory.appendingPathComponent("inkstead-writer-image-\(UUID().uuidString).jpg")
-        defer { try? FileManager.default.removeItem(at: output) }
-        try writeJPEG(image, to: output, quality: quality)
-        return try Foundation.Data(contentsOf: output)
+        return try TurboJPEGImageEncoder.encodeJPEG(image, quality: quality)
     }
 
     private static func encodePNG(source: URL, maxWidth: Int, maxHeight: Int) throws -> Foundation.Data? {
         guard let image = try decodePNG(source)?.scaledToFit(maxWidth: maxWidth, maxHeight: maxHeight) else {
             return nil
         }
-        let output = FileManager.default.temporaryDirectory.appendingPathComponent("inkstead-writer-image-\(UUID().uuidString).png")
-        defer { try? FileManager.default.removeItem(at: output) }
-        try writePNG(image, to: output)
-        return try Foundation.Data(contentsOf: output)
+        let rgba = image.pixels.flatMap { [$0.r, $0.g, $0.b, $0.a] }
+        return Foundation.Data(try PNGCodec.encodeRGBA(width: image.width, height: image.height, rgba: rgba))
     }
 
     private static func encodeWebP(source: URL, maxWidth: Int, maxHeight: Int, quality: Int) throws -> Foundation.Data? {
@@ -687,76 +678,19 @@ private enum PureSwiftImageEncoder {
         return Foundation.Data(try webp.encode(quality: Float(max(1, min(100, quality)))))
     }
 
-    private static func decodeJPEG(_ url: URL) throws -> DecodedImage? {
-        do {
-            return try decodeJPEGWithoutRecovery(url)
-        } catch JPEG.DecodingError.truncatedEntropyCodedSegment {
-            return try decodeJPEGWithEntropyPadding(url)
-        }
-    }
-
-    private static func decodeJPEGWithoutRecovery(_ url: URL) throws -> DecodedImage? {
-        guard let image: JPEG.Data.Rectangular<JPEG.Common> = try .decompress(path: url.path) else {
-            return nil
-        }
-        let pixels = image.unpack(as: JPEG.RGB.self).map { RGBAPixel(r: $0.r, g: $0.g, b: $0.b, a: 255) }
-        return DecodedImage(width: image.size.x, height: image.size.y, pixels: pixels)
-            .oriented(exifOrientation(from: image.metadata))
-    }
-
-    private static func decodeJPEGWithEntropyPadding(_ url: URL) throws -> DecodedImage? {
-        for padByteCount in [16 * 1024, 64 * 1024, 256 * 1024] {
-            guard let data = try entropyPaddedJPEGData(from: url, padByteCount: padByteCount) else {
-                return nil
-            }
-            let padded = FileManager.default.temporaryDirectory.appendingPathComponent("inkstead-writer-jpeg-\(UUID().uuidString).jpg")
-            defer { try? FileManager.default.removeItem(at: padded) }
-            try data.write(to: padded, options: .atomic)
-            do {
-                return try decodeJPEGWithoutRecovery(padded)
-            } catch JPEG.DecodingError.truncatedEntropyCodedSegment {
-                continue
-            }
-        }
-        throw JPEG.DecodingError.truncatedEntropyCodedSegment
-    }
-
-    private static func entropyPaddedJPEGData(from url: URL, padByteCount: Int) throws -> Foundation.Data? {
-        let bytes = [UInt8](try Foundation.Data(contentsOf: url))
-        guard let endOfImage = terminalEndOfImageIndex(in: bytes) else {
-            return nil
-        }
-
-        // Some scanners emit JPEGs that browser/libjpeg decoders recover by
-        // treating premature entropy EOF as fill bits. Feed swift-jpeg the same
-        // kind of stuffed fill bytes before the terminal EOI marker.
-        var data = Foundation.Data()
-        data.reserveCapacity(bytes.count + padByteCount)
-        data.append(contentsOf: bytes[..<endOfImage])
-        for _ in 0..<(padByteCount / 2) {
-            data.append(0xFF)
-            data.append(0x00)
-        }
-        data.append(contentsOf: bytes[endOfImage...])
-        return data
-    }
-
-    private static func terminalEndOfImageIndex(in bytes: [UInt8]) -> Int? {
-        guard bytes.count >= 2 else { return nil }
-        for index in stride(from: bytes.count - 2, through: 0, by: -1) {
-            if bytes[index] == 0xFF, bytes[index + 1] == 0xD9 {
-                return index
-            }
-        }
-        return nil
-    }
-
     private static func decodePNG(_ url: URL) throws -> DecodedImage? {
-        guard let image: PNG.Image = try .decompress(path: url.path) else {
-            return nil
+        let image = try PNGCodec.decode([UInt8](Foundation.Data(contentsOf: url)))
+        var pixels: [RGBAPixel] = []
+        pixels.reserveCapacity(image.width * image.height)
+        for index in stride(from: 0, to: image.rgba.count, by: 4) {
+            pixels.append(RGBAPixel(
+                r: image.rgba[index],
+                g: image.rgba[index + 1],
+                b: image.rgba[index + 2],
+                a: image.rgba[index + 3]
+            ))
         }
-        let pixels = image.unpack(as: PNG.RGBA<UInt8>.self).map { RGBAPixel(r: $0.r, g: $0.g, b: $0.b, a: $0.a) }
-        return DecodedImage(width: image.size.x, height: image.size.y, pixels: pixels)
+        return DecodedImage(width: image.width, height: image.height, pixels: pixels)
     }
 
     private static func decodeWebP(_ url: URL) throws -> DecodedImage? {
@@ -774,90 +708,67 @@ private enum PureSwiftImageEncoder {
         return DecodedImage(width: image.width, height: image.height, pixels: pixels)
     }
 
-    private static func writeJPEG(_ image: DecodedImage, to url: URL, quality: Int) throws {
-        let pixels = image.pixels.map { pixel -> JPEG.RGB in
+}
+
+private enum TurboJPEGImageEncoder {
+    static func dimensions(of url: URL) throws -> ImageDimensions? {
+        let bytes = [UInt8](try Foundation.Data(contentsOf: url))
+        let dimensions = try JPEGTurbo.dimensions(of: bytes)
+        if let orientation = JPEGMetadataReader.orientation(in: bytes),
+           [5, 6, 7, 8].contains(orientation) {
+            return ImageDimensions(width: dimensions.height, height: dimensions.width)
+        }
+        return ImageDimensions(width: dimensions.width, height: dimensions.height)
+    }
+
+    static func encodeJPEG(source: URL, maxWidth: Int, maxHeight: Int, quality: Int) throws -> Foundation.Data? {
+        guard let image = try decode(source)?.scaledToFit(maxWidth: maxWidth, maxHeight: maxHeight) else {
+            return nil
+        }
+        return try encodeJPEG(image, quality: quality)
+    }
+
+    static func decode(_ url: URL) throws -> DecodedImage? {
+        let bytes = [UInt8](try Foundation.Data(contentsOf: url))
+        let image = try JPEGTurbo.decode(bytes)
+        guard image.rgba.count == image.width * image.height * 4 else {
+            throw JPEGTurboError.invalidPixelBuffer
+        }
+        var pixels: [RGBAPixel] = []
+        pixels.reserveCapacity(image.width * image.height)
+        for index in stride(from: 0, to: image.rgba.count, by: 4) {
+            pixels.append(RGBAPixel(
+                r: image.rgba[index],
+                g: image.rgba[index + 1],
+                b: image.rgba[index + 2],
+                a: image.rgba[index + 3]
+            ))
+        }
+        return DecodedImage(width: image.width, height: image.height, pixels: pixels)
+            .oriented(JPEGMetadataReader.orientation(in: bytes))
+    }
+
+    static func encodeJPEG(_ image: DecodedImage, quality: Int) throws -> Foundation.Data {
+        var rgb: [UInt8] = []
+        rgb.reserveCapacity(image.width * image.height * 3)
+        for pixel in image.pixels {
             let alpha = Double(pixel.a) / 255.0
-            let r = UInt8((Double(pixel.r) * alpha + 255.0 * (1.0 - alpha)).rounded())
-            let g = UInt8((Double(pixel.g) * alpha + 255.0 * (1.0 - alpha)).rounded())
-            let b = UInt8((Double(pixel.b) * alpha + 255.0 * (1.0 - alpha)).rounded())
-            return JPEG.RGB(r, g, b)
+            rgb.append(UInt8((Double(pixel.r) * alpha + 255.0 * (1.0 - alpha)).rounded()))
+            rgb.append(UInt8((Double(pixel.g) * alpha + 255.0 * (1.0 - alpha)).rounded()))
+            rgb.append(UInt8((Double(pixel.b) * alpha + 255.0 * (1.0 - alpha)).rounded()))
         }
-        let layout: JPEG.Layout<JPEG.Common> = .init(
-            format: .ycc8,
-            process: .baseline,
-            components: [
-                1: (factor: (2, 2), qi: 0),
-                2: (factor: (1, 1), qi: 1),
-                3: (factor: (1, 1), qi: 1)
-            ],
-            scans: [
-                .sequential((1, \.0, \.0), (2, \.1, \.1), (3, \.1, \.1))
-            ]
-        )
-        let jfif: JPEG.JFIF = .init(version: .v1_2, density: (72, 72, .inches))
-        let output: JPEG.Data.Rectangular<JPEG.Common> = .pack(
-            size: (x: image.width, y: image.height),
-            layout: layout,
-            metadata: [.jfif(jfif)],
-            pixels: pixels
-        )
-        let compression = jpegCompressionLevel(forQuality: quality)
-        try output.compress(path: url.path, quanta: [
-            0: JPEG.CompressionLevel.luminance(compression).quanta,
-            1: JPEG.CompressionLevel.chrominance(compression).quanta
-        ])
-    }
-
-    private static func writePNG(_ image: DecodedImage, to url: URL) throws {
-        let pixels = image.pixels.map { PNG.RGBA<UInt8>($0.r, $0.g, $0.b, $0.a) }
-        let layout = PNG.Layout(format: .rgba8(palette: [], fill: nil))
-        let output = PNG.Image(
-            packing: pixels,
-            size: (x: image.width, y: image.height),
-            layout: layout
-        )
-        try output.compress(path: url.path, level: 9)
-    }
-
-    private static func jpegCompressionLevel(forQuality quality: Int) -> Double {
-        let clamped = max(1, min(100, quality))
-        return max(0.0, min(8.0, Double(100 - clamped) / 72.0))
-    }
-
-    private static func exifOrientation(from metadata: [JPEG.Metadata]) -> Int? {
-        for item in metadata {
-            guard case .exif(let exif) = item,
-                  let field = exif[tag: 274],
-                  field.count == 1 else {
-                continue
-            }
-            guard case .uint16 = field.type else { continue }
-            switch field.box.endianness {
-            case .littleEndian:
-                return Int(field.box.contents.0) | Int(field.box.contents.1) << 8
-            case .bigEndian:
-                return Int(field.box.contents.0) << 8 | Int(field.box.contents.1)
-            }
-        }
-        return nil
+        return Foundation.Data(try JPEGTurbo.encodeRGB(width: image.width, height: image.height, rgb: rgb, quality: quality))
     }
 }
 
-private enum JPEGHeaderReader {
+private enum JPEGMetadataReader {
     private static let startOfImage: UInt8 = 0xD8
     private static let startOfScan: UInt8 = 0xDA
     private static let endOfImage: UInt8 = 0xD9
 
     private static let standaloneMarkers: Set<UInt8> = [0x01, 0xD0, 0xD1, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6, 0xD7]
-    private static let startOfFrameMarkers: Set<UInt8> = [
-        0xC0, 0xC1, 0xC2, 0xC3,
-        0xC5, 0xC6, 0xC7,
-        0xC9, 0xCA, 0xCB,
-        0xCD, 0xCE, 0xCF
-    ]
 
-    static func dimensions(of url: URL) throws -> ImageDimensions? {
-        let bytes = [UInt8](try Foundation.Data(contentsOf: url))
+    static func orientation(in bytes: [UInt8]) -> Int? {
         guard bytes.count >= 4,
               bytes[0] == 0xFF,
               bytes[1] == startOfImage else {
@@ -865,7 +776,6 @@ private enum JPEGHeaderReader {
         }
 
         var index = 2
-        var orientation: Int?
         while index < bytes.count {
             while index < bytes.count, bytes[index] == 0xFF {
                 index += 1
@@ -888,19 +798,8 @@ private enum JPEGHeaderReader {
             let segmentEnd = segmentStart + segmentLength - 2
             guard segmentEnd <= bytes.count else { return nil }
 
-            if marker == 0xE1 {
-                orientation = exifOrientation(in: bytes, start: segmentStart, end: segmentEnd) ?? orientation
-            }
-
-            if startOfFrameMarkers.contains(marker) {
-                guard segmentStart + 5 <= segmentEnd else { return nil }
-                let height = Int(bytes[segmentStart + 1]) << 8 | Int(bytes[segmentStart + 2])
-                let width = Int(bytes[segmentStart + 3]) << 8 | Int(bytes[segmentStart + 4])
-                guard width > 0, height > 0 else { return nil }
-                if let orientation, [5, 6, 7, 8].contains(orientation) {
-                    return ImageDimensions(width: height, height: width)
-                }
-                return ImageDimensions(width: width, height: height)
+            if marker == 0xE1, let orientation = exifOrientation(in: bytes, start: segmentStart, end: segmentEnd) {
+                return orientation
             }
 
             index = segmentEnd

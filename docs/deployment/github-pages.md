@@ -12,7 +12,7 @@ Choose GitHub Pages during `inkstead-writer init`, or add this to `inkstead-writ
 }
 ```
 
-GitHub Pages uses GitHub Actions, so Inkstead Writer also generates `.github/workflows/publish.yml` when this adapter is selected during `init`.
+GitHub Pages uses GitHub Actions, so Inkstead Writer also generates `.github/workflows/publish.yml` when this target is selected during `init`.
 
 ## Repository Settings
 
@@ -20,16 +20,9 @@ In GitHub, open the repository settings and configure Pages to deploy from GitHu
 
 ## Publishing
 
-The generated workflow:
+Push to GitHub, or run the generated workflow manually from the Actions tab. The workflow runs `./inkstead-writer publish` and deploys the built site to GitHub Pages.
 
-- runs `./inkstead-writer publish`
-- deploys the built site to GitHub Pages
-
-Local `./inkstead-writer deploy` does not publish directly to GitHub Pages. Push to GitHub, or run the workflow manually from the Actions tab.
-
-## Syndication Order
-
-If syndication is enabled, the workflow publishes the site first, then syndicates posts, saves the new links, rebuilds, and publishes the updated site again.
+Local `./inkstead-writer deploy` does not publish directly to GitHub Pages.
 
 ## Variables
 

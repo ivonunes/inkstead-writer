@@ -16,13 +16,7 @@ GitLab Pages is published by GitLab CI. Local `./inkstead-writer deploy` does no
 
 ## Publishing
 
-When GitLab Pages is selected during `init`, Inkstead Writer generates `.gitlab-ci.yml` with a Pages job that:
-
-- installs wrapper dependencies
-- runs `./inkstead-writer publish`
-- deploys the built site to GitLab Pages
-
-If syndication is enabled, the pipeline publishes the site first, then syndicates posts, saves the new links, and publishes the updated site again.
+When GitLab Pages is selected during `init`, Inkstead Writer generates `.gitlab-ci.yml` with a Pages job. Push to GitLab, or start the pipeline manually from GitLab.
 
 ## Variables
 

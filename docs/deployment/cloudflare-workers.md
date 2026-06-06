@@ -1,6 +1,6 @@
 # Cloudflare Workers
 
-Inkstead Writer deploys static sites to Cloudflare Workers through the Cloudflare Workers API.
+Inkstead Writer can publish a static site to Cloudflare Workers.
 
 Choose Cloudflare Workers during `inkstead-writer init`, or add this to `inkstead-writer.json` later:
 
@@ -30,15 +30,6 @@ Run `./inkstead-writer doctor` before the first publish to confirm the Cloudflar
 ./inkstead-writer publish
 ```
 
-`./inkstead-writer publish` builds and deploys the site before running syndication, so links are live before they are posted elsewhere.
-
-If you only want to deploy an already-built site:
-
-```bash
-./inkstead-writer build
-./inkstead-writer deploy
-```
-
-Inkstead Writer uploads the configured build output directory with the Workers static assets direct-upload API, then deploys a small Worker module that serves those assets. You do not need Wrangler installed.
+You do not need Wrangler installed. Inkstead Writer creates or updates the Worker named by `projectName` and publishes the configured build output.
 
 Routes, custom domains, and workers.dev subdomains are still managed in Cloudflare. Inkstead Writer deploys the Worker script named by `projectName`.

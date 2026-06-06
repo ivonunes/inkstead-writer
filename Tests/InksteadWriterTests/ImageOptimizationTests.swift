@@ -33,7 +33,7 @@ final class ImageOptimizationTests: XCTestCase {
         XCTAssertEqual(try ImageOptimizer.dimensions(of: image), ImageDimensions(width: 320, height: 180))
     }
 
-    func testTruncatedJPEGCanBeOptimizedWithEntropyRecovery() throws {
+    func testTruncatedJPEGCanBeOptimizedWithTurboDecoderRecovery() throws {
         let root = try TemporaryDirectory()
         let image = root.url.appendingPathComponent("truncated.jpg")
         try entropyTruncatedJPEGData(width: 320, height: 180).write(to: image)

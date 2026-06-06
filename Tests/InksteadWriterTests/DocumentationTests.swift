@@ -60,7 +60,7 @@ final class DocumentationTests: XCTestCase {
         XCTAssertTrue(script.contains("/usr/local/bin"))
 
         let readme = try String(contentsOf: root.appendingPathComponent("README.md"), encoding: .utf8)
-        let gettingStarted = try String(contentsOf: root.appendingPathComponent("docs/getting-started.md"), encoding: .utf8)
+        let gettingStarted = try String(contentsOf: root.appendingPathComponent("docs/start/getting-started.md"), encoding: .utf8)
         for markdown in [readme, gettingStarted] {
             XCTAssertTrue(markdown.contains("curl -fsSL https://install.inkstead.dev/writer | sh"))
             XCTAssertTrue(markdown.contains("brew tap ivonunes/tap"))

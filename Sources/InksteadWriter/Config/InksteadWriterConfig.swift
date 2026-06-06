@@ -1,7 +1,7 @@
 import Foundation
 
 public enum InksteadWriterMetadata {
-    public static let currentVersion = "2.0.4"
+    public static let currentVersion = "2.0.5"
     public static let configFileName = "inkstead-writer.json"
     public static let legacyConfigFileName = "inkstead.json"
     public static let executableName = "inkstead-writer"

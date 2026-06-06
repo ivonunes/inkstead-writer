@@ -1,12 +1,28 @@
 # Deployment
 
-Inkstead Writer can publish through deployment adapters without changing how you write posts or build themes.
+Inkstead Writer can publish your built site without changing how you write posts or build themes.
 
 Choose a deployment target during `inkstead-writer init`, or change it later in `inkstead-writer.json`.
 
-Some deployment adapters require a matching CI adapter. Inkstead Writer validates adapter combinations when it loads `inkstead-writer.json`.
+Some publishing targets, such as GitHub Pages and GitLab Pages, run through their matching CI provider. Inkstead Writer checks those combinations when it loads your config.
 
-Writer builds a custom not-found page at `dist/404.html`. Cloudflare Workers deployments serve that file through asset binding 404 handling, and Pages-style static hosts such as Cloudflare Pages, GitHub Pages, and Forgejo Pages include it in their uploaded artifact.
+## What Publish Does
+
+`./inkstead-writer publish` runs the full publishing flow:
+
+1. Build the site.
+2. Deploy the built output.
+3. Syndicate posts that ask to be syndicated.
+4. Rebuild and deploy again if syndication added new links to post frontmatter.
+
+That order means social posts can link to pages that are already live.
+
+If you only want to deploy an already-built site, run:
+
+```bash
+./inkstead-writer build
+./inkstead-writer deploy
+```
 
 ## Before Publishing
 
@@ -30,9 +46,11 @@ If `doctor` says a generated workflow differs from Inkstead Writer's current tem
 ./inkstead-writer migrate
 ```
 
-The migrate command updates generated workflow files such as `.github/workflows/publish.yml`, `.gitlab-ci.yml`, `.forgejo/workflows/publish.yml`, and the root `./inkstead-writer` wrapper.
+The migrate command updates generated workflow files such as `.github/workflows/publish.yml`, `.gitlab-ci.yml`, `.forgejo/workflows/publish.yml`, and the root `./inkstead-writer` command.
 
-Adapter guides:
+Inkstead Writer writes a custom not-found page to `404.html` in the build output. Static hosts that support custom 404 files can serve it automatically; Cloudflare Workers deployments use the same file through Workers static asset handling.
+
+Provider guides:
 
 - [Cloudflare Workers](./cloudflare-workers/)
 - [Netlify](./netlify/)

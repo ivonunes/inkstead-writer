@@ -13,8 +13,8 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/ivonunes/plume.git", from: "1.0.0"),
-        .package(path: "ThirdParty/swift-jpeg"),
-        .package(path: "ThirdParty/swift-png"),
+        .package(path: "ThirdParty/libjpeg-turbo"),
+        .package(path: "ThirdParty/libspng"),
         .package(path: "ThirdParty/libwebp")
     ],
     targets: [
@@ -22,9 +22,8 @@ let package = Package(
             name: "InksteadWriter",
             dependencies: [
                 .product(name: "Plume", package: "plume"),
-                .product(name: "JPEG", package: "swift-jpeg"),
-                .product(name: "JPEGSystem", package: "swift-jpeg"),
-                .product(name: "PNG", package: "swift-png"),
+                .product(name: "JPEGTurbo", package: "libjpeg-turbo"),
+                .product(name: "PNGCodec", package: "libspng"),
                 .product(name: "WebP", package: "libwebp")
             ],
             exclude: [
@@ -47,9 +46,8 @@ let package = Package(
         .testTarget(name: "InksteadWriterTests", dependencies: [
             "InksteadWriter",
             .product(name: "Plume", package: "plume"),
-            .product(name: "JPEG", package: "swift-jpeg"),
-            .product(name: "JPEGSystem", package: "swift-jpeg"),
-            .product(name: "PNG", package: "swift-png"),
+            .product(name: "JPEGTurbo", package: "libjpeg-turbo"),
+            .product(name: "PNGCodec", package: "libspng"),
             .product(name: "WebP", package: "libwebp")
         ])
     ]

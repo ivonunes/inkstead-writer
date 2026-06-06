@@ -14,4 +14,4 @@ MASTODON_INSTANCE_URL=https://mastodon.social
 MASTODON_ACCESS_TOKEN=...
 ```
 
-Titled posts syndicate as the title plus canonical URL. Untitled notes syndicate as native social posts. Photo notes upload attached photos where possible.
+Mastodon photo notes upload attached photos where possible.

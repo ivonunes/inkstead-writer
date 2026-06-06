@@ -1,21 +1,25 @@
 # Continuous Integration
 
-CI adapters let Inkstead Writer publish your site automatically when you push changes.
+CI providers let Inkstead Writer publish your site automatically when you push changes.
 
 During `inkstead-writer init`, choose whether you want Inkstead Writer to create a CI workflow. You can also add or change CI later in `inkstead-writer.json`.
 
-Generated CI workflows usually:
+Generated workflows usually:
 
-- install Inkstead Writer
-- build the site
-- deploy it with the configured deployment adapter
+- check out the repository
+- run the site's `./inkstead-writer publish` command
+- deploy with the configured publishing target
 - run syndication after deployment, when enabled
-- save syndication metadata back to the repository when the platform allows it
+- save syndication links back to the repository when the platform allows it
 
-Use `./inkstead-writer requirements` to see which secrets or variables your selected adapters need. Add those names to your CI provider before expecting automated publishing to work.
+The generated `./inkstead-writer` command downloads the Linux Inkstead Writer binary for the version recorded in `inkstead-writer.json` when the runner does not already have it cached.
 
-Adapter guides:
+Use `./inkstead-writer requirements` to see which secrets or variables your selected publishing and syndication providers need. Add those names to your CI provider before expecting automated publishing to work.
 
-- [GitHub Actions](/github-actions/)
-- [GitLab CI](/gitlab-ci/)
-- [Forgejo Actions](/forgejo-actions/)
+When syndication adds links to post frontmatter, Inkstead Writer tries to commit those changes back to the repository. If the CI provider cannot push, syndication can still publish, but those links will not be saved automatically.
+
+Provider guides:
+
+- [GitHub Actions](/ci/github-actions/)
+- [GitLab CI](/ci/gitlab-ci/)
+- [Forgejo Actions](/ci/forgejo-actions/)

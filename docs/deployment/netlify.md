@@ -1,6 +1,6 @@
 # Netlify
 
-Inkstead Writer deploys static sites to Netlify through the Netlify API.
+Inkstead Writer can publish a static site to Netlify.
 
 Choose Netlify during `inkstead-writer init`, or add this to `inkstead-writer.json` later:
 
@@ -29,13 +29,4 @@ Run `./inkstead-writer doctor` before the first publish to confirm the Netlify v
 ./inkstead-writer publish
 ```
 
-`./inkstead-writer publish` builds and deploys the site before running syndication, so links are live before they are posted elsewhere.
-
-If you only want to deploy an already-built site:
-
-```bash
-./inkstead-writer build
-./inkstead-writer deploy
-```
-
-Inkstead Writer packages the configured build output directory as a ZIP archive and uploads it directly to the Netlify deploy API. You do not need the Netlify CLI installed.
+You do not need the Netlify CLI installed. Inkstead Writer publishes the configured build output directly to the Netlify site identified by `NETLIFY_SITE_ID`.

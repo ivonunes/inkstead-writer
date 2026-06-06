@@ -2,13 +2,11 @@
 
 Inkstead Writer is an opinionated publishing engine for personal indie websites. Write in Markdown, build a static site, deploy anywhere, and optionally syndicate posts to social media.
 
-Inkstead Writer runs through a small POSIX launcher script that downloads the right single Swift binary for each site. macOS and Linux are the supported release targets.
+Inkstead Writer supports macOS and Linux.
 
 ## Get Started
 
-The full documentation is available at [inkstead.dev](https://inkstead.dev/).
-
-Install the `inkstead-writer` launcher, then create a site:
+Install the `inkstead-writer` launcher, then create and preview a site:
 
 ```bash
 curl -fsSL https://install.inkstead.dev/writer | sh
@@ -25,10 +23,10 @@ brew tap ivonunes/tap
 brew install inkstead-writer
 ```
 
-Generated sites include a root `./inkstead-writer` wrapper. Commit it with the site; it downloads the version recorded in `inkstead-writer.json` into the user Inkstead Writer cache when needed. The global launcher also works for site commands when you run it from inside an existing site.
+The full documentation is available at [inkstead.dev](https://inkstead.dev/).
 
-Use `inkstead-writer init --help` to see adapter options for deployment, CI, syndication, and app connection overrides.
+Inside a site, use the generated `./inkstead-writer` command. It keeps that site on the Inkstead Writer version recorded in `inkstead-writer.json`. Use `inkstead-writer init --help` to see options for publishing, CI, syndication, and app connection setup.
 
 ## Plume
 
-Inkstead Writer themes are written in Plume, a templating language for building expressive websites. Plume brings HTML, styles, assets, and behaviour into one coherent authoring model, while Inkstead Writer embeds it and exposes theme tooling through `inkstead-writer theme ...` so site-local wrappers do not need a separate Plume install.
+Inkstead Writer themes are written in Plume, a templating language for building expressive websites. Plume brings HTML, styles, assets, and behaviour into one authoring model. Inkstead Writer includes Plume, so theme commands run through `./inkstead-writer theme ...` without a separate Plume install.

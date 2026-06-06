@@ -25,8 +25,8 @@ final class PortabilityTests: XCTestCase {
 
         XCTAssertTrue(manifest.contains(#".executable(name: "inkstead-writer""#))
         XCTAssertTrue(manifest.contains(#".library(name: "InksteadWriter""#))
-        XCTAssertTrue(manifest.contains("swift-jpeg"))
-        XCTAssertTrue(manifest.contains("swift-png"))
+        XCTAssertTrue(manifest.contains("libjpeg-turbo"))
+        XCTAssertTrue(manifest.contains("libspng"))
         XCTAssertTrue(manifest.contains("libwebp"))
         XCTAssertFalse(manifest.contains("resources:"))
     }
