@@ -78,6 +78,7 @@ final class SiteBuilderTests: XCTestCase {
 
         XCTAssertTrue(home.contains("Why I Still Want a Personal Website"))
         XCTAssertTrue(home.contains(#"<link rel="icon" href="/favicon.png">"#))
+        XCTAssertTrue(home.contains(#"<img class="site-avatar u-photo" src="/favicon.png" alt="">"#))
         XCTAssertTrue(home.contains(#"<link rel="me" href="https://bsky.app/profile/example.com">"#))
         XCTAssertTrue(home.contains(#"<link rel="stylesheet" href="/assets/plume/sitestyles-"#))
         let css = try FileManager.default.contentsOfDirectory(at: root.url.appendingPathComponent("dist/assets/plume"), includingPropertiesForKeys: nil)
@@ -812,7 +813,7 @@ final class SiteBuilderTests: XCTestCase {
         try SiteBuilder.build(root: root.url, config: try ConfigLoader.load(root: root.url))
 
         let home = try String(contentsOf: root.url.appendingPathComponent("dist/index.html"), encoding: .utf8)
-        XCTAssertTrue(home.contains(#"data-plume-on-resize="page.measure('.active', into: ['sliderX', 'sliderWidth'])""#))
+        XCTAssertTrue(home.contains(#"data-plume-on-resize="page.measure(&#39;.active&#39;, into: [&#39;sliderX&#39;, &#39;sliderWidth&#39;])""#))
         XCTAssertTrue(home.contains(#"data-plume-style-template---slider-x="{sliderX}px""#))
         XCTAssertTrue(home.contains(#"data-plume-on-visible="sliderX.set(10)""#))
         let runtime = try String(contentsOf: root.url.appendingPathComponent("dist/assets/plume-runtime.js"), encoding: .utf8)

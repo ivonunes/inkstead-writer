@@ -9,19 +9,24 @@ public struct SyndicationContext {
     public var http: HTTPClient
     public var now: () -> Date
     public var nonce: () -> String
+    public var sleep: (TimeInterval) async throws -> Void
 
     public init(
         root: URL,
         env: [String: String],
         http: @escaping HTTPClient = DefaultHTTPClient.send,
         now: @escaping () -> Date = Date.init,
-        nonce: @escaping () -> String = { UUID().uuidString.replacingOccurrences(of: "-", with: "") }
+        nonce: @escaping () -> String = { UUID().uuidString.replacingOccurrences(of: "-", with: "") },
+        sleep: @escaping (TimeInterval) async throws -> Void = { seconds in
+            try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+        }
     ) {
         self.root = root
         self.env = env
         self.http = http
         self.now = now
         self.nonce = nonce
+        self.sleep = sleep
     }
 }
 
@@ -30,7 +35,7 @@ public enum SyndicationProviders {
         switch provider {
         case .mastodon, .bluesky:
             true
-        case .flickr:
+        case .flickr, .pixelfed:
             post.kind == .photoNote
         }
     }
@@ -44,6 +49,8 @@ public enum SyndicationProviders {
                 return try await publishBluesky(post: post, context: context)
             case .flickr:
                 return try await publishFlickr(post: post, context: context)
+            case .pixelfed:
+                return try await publishPixelfed(post: post, context: context)
             }
         } catch {
             return .failed(error is InksteadWriterError ? String(describing: error) : error.localizedDescription)
@@ -51,9 +58,43 @@ public enum SyndicationProviders {
     }
 
     private static func publishMastodon(post: NormalizedPost, context: SyndicationContext) async throws -> SyndicationResult {
-        guard let instance = context.env["MASTODON_INSTANCE_URL"]?.trimmingCharacters(in: CharacterSet(charactersIn: "/")), !instance.isEmpty,
-              let token = context.env["MASTODON_ACCESS_TOKEN"], !token.isEmpty else {
-            return .failed("Missing Mastodon credentials.")
+        try await publishMastodonCompatible(
+            post: post,
+            context: context,
+            label: "Mastodon",
+            instanceVariable: "MASTODON_INSTANCE_URL",
+            tokenVariable: "MASTODON_ACCESS_TOKEN",
+            mediaPath: "/api/v2/media"
+        )
+    }
+
+    // Pixelfed implements the Mastodon client API; only the media endpoint
+    // generation differs (Pixelfed serves v1).
+    private static func publishPixelfed(post: NormalizedPost, context: SyndicationContext) async throws -> SyndicationResult {
+        try await publishMastodonCompatible(
+            post: post,
+            context: context,
+            label: "Pixelfed",
+            instanceVariable: "PIXELFED_INSTANCE_URL",
+            tokenVariable: "PIXELFED_ACCESS_TOKEN",
+            mediaPath: "/api/v1/media"
+        )
+    }
+
+    private static func publishMastodonCompatible(
+        post: NormalizedPost,
+        context: SyndicationContext,
+        label: String,
+        instanceVariable: String,
+        tokenVariable: String,
+        mediaPath: String
+    ) async throws -> SyndicationResult {
+        guard let instance = context.env[instanceVariable]?.trimmingCharacters(in: CharacterSet(charactersIn: "/")), !instance.isEmpty,
+              let token = context.env[tokenVariable], !token.isEmpty else {
+            return .failed("Missing \(label) credentials.")
+        }
+        guard let mediaURL = URL(string: "\(instance)\(mediaPath)"), let statusesURL = URL(string: "\(instance)/api/v1/statuses") else {
+            return .failed("\(instanceVariable) is not a valid URL: \(instance)")
         }
         let limit = try await mastodonMediaLimit(instance: instance, context: context)
         var mediaIDs: [String] = []
@@ -63,27 +104,33 @@ public enum SyndicationProviders {
             var form = MultipartForm(boundary: boundary)
             form.addFile(name: "file", filename: prepared.filename, mimeType: prepared.mimeType, bytes: prepared.bytes)
             if let alt = post.alt { form.addField(name: "description", value: alt) }
-            var request = URLRequest(url: URL(string: "\(instance)/api/v2/media")!)
+            var request = URLRequest(url: mediaURL)
             request.httpMethod = "POST"
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
             request.httpBody = form.body()
             let upload = try await context.http(request)
             guard (200..<300).contains(upload.statusCode) else {
-                return .failed("Mastodon media upload returned \(upload.statusCode).")
+                return .failed("\(label) media upload returned \(upload.statusCode).")
             }
-            if let json = try JSONSerialization.jsonObject(with: upload.body) as? [String: Any], let id = json["id"] as? String {
-                mediaIDs.append(id)
+            guard let json = try JSONSerialization.jsonObject(with: upload.body) as? [String: Any], let id = json["id"] as? String else {
+                return .failed("\(label) media upload did not return a media id.")
             }
+            if upload.statusCode == 202 {
+                guard try await mastodonMediaProcessed(id: id, instance: instance, token: token, context: context) else {
+                    return .failed("\(label) did not finish processing media \(id) in time.")
+                }
+            }
+            mediaIDs.append(id)
         }
-        var request = URLRequest(url: URL(string: "\(instance)/api/v1/statuses")!)
+        var request = URLRequest(url: statusesURL)
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: ["status": SyndicationText.text(for: post), "media_ids": mediaIDs])
         let response = try await context.http(request)
         guard (200..<300).contains(response.statusCode) else {
-            return .failed("Mastodon returned \(response.statusCode).")
+            return .failed("\(label) returned \(response.statusCode)\(errorDetail(in: response.body)).")
         }
         let json = (try? JSONSerialization.jsonObject(with: response.body)) as? [String: Any]
         return SyndicationResult(status: .published, fields: [
@@ -93,10 +140,25 @@ public enum SyndicationProviders {
         ].compactMapValues { $0 })
     }
 
+    private static func mastodonMediaProcessed(id: String, instance: String, token: String, context: SyndicationContext) async throws -> Bool {
+        guard let url = URL(string: "\(instance)/api/v1/media/\(id)") else { return false }
+        for _ in 0..<10 {
+            try await context.sleep(1)
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            let response = try await context.http(request)
+            if response.statusCode == 200 { return true }
+            guard response.statusCode == 202 || response.statusCode == 206 else { return false }
+        }
+        return false
+    }
+
     private static func mastodonMediaLimit(instance: String, context: SyndicationContext) async throws -> MediaLimit {
-        var request = URLRequest(url: URL(string: "\(instance)/api/v2/instance")!)
-        request.httpMethod = "GET"
         let fallback = MediaLimit(maxBytes: 10 * 1024 * 1024, maxDimension: 4096)
+        guard let url = URL(string: "\(instance)/api/v2/instance") else { return fallback }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
         let response = try? await context.http(request)
         guard let response, (200..<300).contains(response.statusCode),
               let json = try? JSONSerialization.jsonObject(with: response.body) as? [String: Any],
@@ -125,6 +187,7 @@ public enum SyndicationProviders {
         guard let accessJwt = session["accessJwt"] as? String, let did = session["did"] as? String else {
             return .failed("Bluesky login did not return a session.")
         }
+        let handle = (session["handle"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? did
 
         var images: [[String: Any]] = []
         for photoPath in post.sourcePhotos.prefix(4) {
@@ -138,12 +201,12 @@ public enum SyndicationProviders {
             guard (200..<300).contains(response.statusCode),
                   let json = try? JSONSerialization.jsonObject(with: response.body) as? [String: Any],
                   let blob = json["blob"] as? [String: Any] else {
-                return .failed("Bluesky media upload returned \(response.statusCode).")
+                return .failed("Bluesky media upload returned \(response.statusCode)\(errorDetail(in: response.body)).")
             }
             images.append(["alt": post.alt ?? "", "image": blob])
         }
 
-        let text = String(SyndicationText.text(for: post).prefix(300))
+        let text = blueskyText(for: post)
         var record: [String: Any] = [
             "$type": "app.bsky.feed.post",
             "text": text,
@@ -171,9 +234,23 @@ public enum SyndicationProviders {
         return SyndicationResult(status: .published, fields: [
             "uri": uri,
             "cid": cid,
-            "url": "https://bsky.app/profile/\(identifier)/post/\(id)",
+            "url": "https://bsky.app/profile/\(handle)/post/\(id)",
             "publishedAt": ISO8601DateFormatter().string(from: context.now())
         ].compactMapValues { $0 })
+    }
+
+    static func blueskyText(for post: NormalizedPost) -> String {
+        let limit = 300
+        let text = SyndicationText.text(for: post)
+        guard text.count > limit else { return text }
+        if let newlineIndex = text.lastIndex(of: "\n") {
+            let url = String(text[text.index(after: newlineIndex)...])
+            if url.hasPrefix("http"), url.count + 2 <= limit {
+                let head = text[..<newlineIndex]
+                return "\(head.prefix(limit - url.count - 2))…\n\(url)"
+            }
+        }
+        return String(text.prefix(limit))
     }
 
     private static func blueskyLinkFacets(in text: String) -> [[String: Any]] {
@@ -257,9 +334,28 @@ public enum SyndicationProviders {
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let response = try await context.http(request)
         guard (200..<300).contains(response.statusCode) else {
-            throw InksteadWriterError.io("\(url) returned \(response.statusCode).")
+            throw InksteadWriterError.io("\(url) returned \(response.statusCode)\(errorDetail(in: response.body)).")
         }
         return (try JSONSerialization.jsonObject(with: response.body) as? [String: Any]) ?? [:]
+    }
+
+    /// Extracts a human-readable message from an error response body. Handles
+    /// the shapes used by X ("title"/"detail"/"errors"), Mastodon and Pixelfed
+    /// ("error"), and Bluesky ("error"/"message").
+    static func errorDetail(in body: Data) -> String {
+        guard let json = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else { return "" }
+        var parts: [String] = []
+        if let title = json["title"] as? String { parts.append(title) }
+        if let detail = json["detail"] as? String { parts.append(detail) }
+        if let message = json["message"] as? String { parts.append(message) }
+        if let error = json["error"] as? String { parts.append(error) }
+        if let errors = json["errors"] as? [[String: Any]] {
+            parts.append(contentsOf: errors.compactMap { $0["message"] as? String ?? $0["detail"] as? String })
+        }
+        var seen = Set<String>()
+        let unique = parts.filter { !$0.isEmpty && seen.insert($0).inserted }
+        guard !unique.isEmpty else { return "" }
+        return ": \(unique.joined(separator: " — "))"
     }
 
     private static func oauthSignature(method: String, url: String, params: [String: String], apiSecret: String, accessSecret: String) -> String {

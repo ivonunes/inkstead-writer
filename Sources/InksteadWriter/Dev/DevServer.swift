@@ -4,10 +4,11 @@ import Foundation
 public final class DevServer: @unchecked Sendable {
     public private(set) var port: Int
 
-    public init(root: URL, config: InksteadWriterConfig, port: Int = 4321, rebuildOnRequest: Bool = true) {
+    public init(root: URL, config: InksteadWriterConfig, port: Int = 4321, rebuildOnRequest: Bool = true, log: @escaping (String) -> Void = { print($0) }) {
         _ = root
         _ = config
         _ = rebuildOnRequest
+        _ = log
         self.port = port
     }
 
@@ -32,20 +33,28 @@ public final class DevServer: @unchecked Sendable {
     private let root: URL
     private let config: InksteadWriterConfig
     private let rebuildOnRequest: Bool
+    private let log: (String) -> Void
     private var socketFD: Int32 = -1
     private var thread: Thread?
     private var running = false
     private var inputSignature: String?
+    private let rebuildLock = NSLock()
+    private var lastSignatureCheck: TimeInterval?
+    private var buildCounter = 0
+    private let changePollTimeout: TimeInterval = 25
+    private let changePollInterval: TimeInterval = 0.25
 
-    public init(root: URL, config: InksteadWriterConfig, port: Int = 4321, rebuildOnRequest: Bool = true) {
+    public init(root: URL, config: InksteadWriterConfig, port: Int = 4321, rebuildOnRequest: Bool = true, log: @escaping (String) -> Void = { print($0) }) {
         self.root = root
         self.config = config
         self.port = port
         self.rebuildOnRequest = rebuildOnRequest
+        self.log = log
     }
 
     public func start() throws {
         if running { return }
+        signal(SIGPIPE, SIG_IGN)
         try SiteBuilder.build(root: root, config: config)
         inputSignature = try? DevInputSnapshot.signature(root: root, config: config)
         #if canImport(Musl)
@@ -114,10 +123,23 @@ public final class DevServer: @unchecked Sendable {
             var length = socklen_t(MemoryLayout<sockaddr>.size)
             let client = accept(socketFD, &clientAddress, &length)
             if client >= 0 {
-                handle(client)
-                closeSocket(client)
+                configureClientSocket(client)
+                let worker = Thread { [weak self] in
+                    self?.handle(client)
+                    closeSocket(client)
+                }
+                worker.start()
             }
         }
+    }
+
+    private func configureClientSocket(_ client: Int32) {
+        var timeout = timeval(tv_sec: 5, tv_usec: 0)
+        setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        #if canImport(Darwin)
+        var noSigpipe: Int32 = 1
+        setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &noSigpipe, socklen_t(MemoryLayout<Int32>.size))
+        #endif
     }
 
     private func handle(_ client: Int32) {
@@ -127,27 +149,61 @@ public final class DevServer: @unchecked Sendable {
         }
 
         if rebuildOnRequest { rebuildIfNeeded() }
+        let includeBody = request.method != "HEAD"
+        if DevSupport.isReservedPath(request.pathOnly) {
+            if request.pathOnly == DevSupport.changesPath {
+                handleChangeNotifications(client, request: request, includeBody: includeBody)
+            } else {
+                writeResponse(client, status: 404, contentType: "text/plain; charset=utf-8", body: Data("Not found".utf8), includeBody: includeBody, cacheControl: "no-store")
+            }
+            return
+        }
         let dist = root.appendingPathComponent(config.build?.output ?? "dist")
-        if request.method == "GET",
+        if request.method == "GET" || request.method == "HEAD",
            let redirectPath = DevSupport.trailingSlashRedirectPath(for: request.pathOnly) {
             let redirectRelative = DevSupport.staticFilePath(for: redirectPath)
             let redirectFile = dist.appendingPathComponent(redirectRelative).standardizedFileURL
             if redirectFile.path.hasPrefix(dist.standardizedFileURL.path + "/"),
                FileManager.default.fileExists(atPath: redirectFile.path) {
-                writeRedirect(client, status: 308, location: redirectPath + request.querySuffix)
+                writeRedirect(client, status: 308, location: redirectPath + request.querySuffix, includeBody: includeBody)
                 return
             }
         }
         let relative = DevSupport.staticFilePath(for: request.pathOnly)
         let file = dist.appendingPathComponent(relative).standardizedFileURL
-        guard file.path.hasPrefix(dist.standardizedFileURL.path + "/"), let body = try? Data(contentsOf: file) else {
-            writeResponse(client, status: 404, contentType: "text/plain; charset=utf-8", body: Data("Not found".utf8))
+        guard file.path.hasPrefix(dist.standardizedFileURL.path + "/"), var body = try? Data(contentsOf: file) else {
+            writeResponse(client, status: 404, contentType: "text/plain; charset=utf-8", body: Data("Not found".utf8), includeBody: includeBody)
             return
         }
-        writeResponse(client, status: 200, contentType: DevSupport.contentType(for: file.path), body: body)
+        let contentType = DevSupport.contentType(for: file.path)
+        if contentType.hasPrefix("text/html") {
+            body = DevSupport.injectingLiveReload(into: body, token: currentBuildToken())
+        }
+        writeResponse(client, status: 200, contentType: contentType, body: body, includeBody: includeBody)
     }
 
-    private func writeRedirect(_ client: Int32, status: Int, location: String) {
+    private func currentBuildToken() -> String {
+        rebuildLock.lock()
+        defer { rebuildLock.unlock() }
+        return String(buildCounter)
+    }
+
+    private func handleChangeNotifications(_ client: Int32, request: HTTPRequest, includeBody: Bool) {
+        let clientToken = DevSupport.queryValue("token", in: request.querySuffix)
+        let deadline = ProcessInfo.processInfo.systemUptime + changePollTimeout
+        while true {
+            let token = currentBuildToken()
+            if token != clientToken || ProcessInfo.processInfo.systemUptime >= deadline || !running {
+                let body = Data("{\"token\":\"\(token)\"}".utf8)
+                writeResponse(client, status: 200, contentType: "application/json", body: body, includeBody: includeBody, cacheControl: "no-store")
+                return
+            }
+            Thread.sleep(forTimeInterval: changePollInterval)
+            if rebuildOnRequest { rebuildIfNeeded() }
+        }
+    }
+
+    private func writeRedirect(_ client: Int32, status: Int, location: String, includeBody: Bool = true) {
         let reason = statusReason(status)
         let body = Data("Redirecting to \(location)\n".utf8)
         var header = "HTTP/1.1 \(status) \(reason)\r\n"
@@ -156,14 +212,16 @@ public final class DevServer: @unchecked Sendable {
         header += "Content-Length: \(body.count)\r\n"
         header += "Connection: close\r\n\r\n"
         var response = Data(header.utf8)
-        response.append(body)
-        response.withUnsafeBytes { pointer in
-            guard let base = pointer.baseAddress else { return }
-            _ = send(client, base, response.count, 0)
-        }
+        if includeBody { response.append(body) }
+        sendAll(client, response)
     }
 
     private func rebuildIfNeeded() {
+        rebuildLock.lock()
+        defer { rebuildLock.unlock() }
+        let now = ProcessInfo.processInfo.systemUptime
+        if let lastCheck = lastSignatureCheck, now - lastCheck < 0.3 { return }
+        lastSignatureCheck = now
         guard let currentSignature = try? DevInputSnapshot.signature(root: root, config: config),
               currentSignature != inputSignature else {
             return
@@ -171,7 +229,9 @@ public final class DevServer: @unchecked Sendable {
         do {
             try SiteBuilder.build(root: root, config: config, options: .incremental)
             inputSignature = try? DevInputSnapshot.signature(root: root, config: config)
+            buildCounter += 1
         } catch {
+            log("Rebuild failed: \(error)")
             inputSignature = currentSignature
         }
     }
@@ -206,23 +266,41 @@ public final class DevServer: @unchecked Sendable {
         return HTTPRequest(method: parts[0], path: parts[1], body: body.isEmpty ? nil : body)
     }
 
-    private func writeResponse(_ client: Int32, status: Int, contentType: String, body: Data) {
+    private func writeResponse(_ client: Int32, status: Int, contentType: String, body: Data, includeBody: Bool = true, cacheControl: String? = nil) {
         let reason = statusReason(status)
         var header = "HTTP/1.1 \(status) \(reason)\r\n"
         header += "Content-Type: \(contentType)\r\n"
         header += "Content-Length: \(body.count)\r\n"
+        if let cacheControl {
+            header += "Cache-Control: \(cacheControl)\r\n"
+        }
         header += "Connection: close\r\n\r\n"
         var response = Data(header.utf8)
-        response.append(body)
-        response.withUnsafeBytes { pointer in
+        if includeBody { response.append(body) }
+        sendAll(client, response)
+    }
+
+    private func sendAll(_ client: Int32, _ data: Data) {
+        #if canImport(Darwin)
+        let flags: Int32 = 0
+        #else
+        let flags = Int32(MSG_NOSIGNAL)
+        #endif
+        data.withUnsafeBytes { pointer in
             guard let base = pointer.baseAddress else { return }
-            _ = send(client, base, response.count, 0)
+            var sent = 0
+            while sent < pointer.count {
+                let written = send(client, base.advanced(by: sent), pointer.count - sent, flags)
+                guard written > 0 else { return }
+                sent += written
+            }
         }
     }
 
     private func statusReason(_ status: Int) -> String {
         switch status {
         case 200: "OK"
+        case 304: "Not Modified"
         case 308: "Permanent Redirect"
         case 400: "Bad Request"
         case 404: "Not Found"

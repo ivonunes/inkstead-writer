@@ -52,10 +52,11 @@ enum ZipArchive {
             let offset = output.count
             try validateSize(offset, label: "ZIP offset")
             let crc = CRC32.checksum(entry.bytes)
+            let flags: UInt16 = entry.name.allSatisfy(\.isASCII) ? 0 : 0x800
 
             output.appendUInt32(0x04034b50)
             output.appendUInt16(20)
-            output.appendUInt16(0)
+            output.appendUInt16(flags)
             output.appendUInt16(0)
             output.appendUInt16(0)
             output.appendUInt16(0)
@@ -68,9 +69,9 @@ enum ZipArchive {
             output.append(entry.bytes)
 
             centralDirectory.appendUInt32(0x02014b50)
+            centralDirectory.appendUInt16(unixVersionMadeBy)
             centralDirectory.appendUInt16(20)
-            centralDirectory.appendUInt16(20)
-            centralDirectory.appendUInt16(0)
+            centralDirectory.appendUInt16(flags)
             centralDirectory.appendUInt16(0)
             centralDirectory.appendUInt16(0)
             centralDirectory.appendUInt16(0)
@@ -82,7 +83,7 @@ enum ZipArchive {
             centralDirectory.appendUInt16(0)
             centralDirectory.appendUInt16(0)
             centralDirectory.appendUInt16(0)
-            centralDirectory.appendUInt32(0)
+            centralDirectory.appendUInt32(unixRegularFileAttributes)
             centralDirectory.appendUInt32(UInt32(offset))
             centralDirectory.append(name)
         }
@@ -102,6 +103,11 @@ enum ZipArchive {
         output.appendUInt16(0)
         return output
     }
+
+    /// Unix host byte so extractors treat names as raw UTF-8 instead of CP437.
+    private static let unixVersionMadeBy: UInt16 = (3 << 8) | 20
+    /// Regular file with 0644 permissions in the upper external-attribute bits.
+    private static let unixRegularFileAttributes: UInt32 = UInt32(0o100644) << 16
 
     private static func validateSize(_ value: Int, label: String) throws {
         if value > Int(UInt32.max) {

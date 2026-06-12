@@ -23,7 +23,7 @@ extension ThemeRenderer {
 
     func jsonFeed(posts: [NormalizedPost], title: String? = nil, path: String = "/feed.json", category: CategoryCollection? = nil) throws -> String {
         var context = baseContext()
-        context["feed"] = FeedRenderer.jsonContext(config: config, posts: posts, title: title, path: path, category: category)
+        context["feed"] = FeedRenderer.jsonContext(config: config, posts: posts, title: title, path: path, category: category.map(serializedCategory))
         let result = try plumeTemplate("feed.json").renderResult(context)
         guard !result.requiresRuntime, result.state.isEmpty, result.navigation.isEmpty, result.styles.isEmpty, result.scripts.isEmpty else {
             throw InksteadWriterError.template("feed.json.plume renders JSON and cannot use Plume runtime state, actions, navigation, styles, or scripts.")
@@ -47,7 +47,7 @@ extension ThemeRenderer {
             path: path,
             presentationScriptSrc: presentationScriptSrc,
             presentationStyleHrefs: presentationStyleHrefs,
-            category: category
+            category: category.map(serializedCategory)
         )
         let result = try plumeTemplate("feed.xml").renderResult(context)
         guard !result.requiresRuntime, result.state.isEmpty, result.navigation.isEmpty else {

@@ -24,7 +24,7 @@ public enum Doctor {
         var environment = [
             DoctorCheck(status: FileManager.default.fileExists(atPath: root.appendingPathComponent(".env").path) ? .pass : .warn, label: FileManager.default.fileExists(atPath: root.appendingPathComponent(".env").path) ? ".env loaded" : ".env not found")
         ]
-        let mergedEnv = readEnv(root: root).merging(env) { _, new in new }
+        let mergedEnv = EnvFile.read(root: root).merging(env) { _, new in new }
         for requirement in AdapterSupport.requirements(for: config) {
             let set = !(mergedEnv[requirement.environmentVariable]?.isEmpty ?? true)
             environment.append(DoctorCheck(status: set ? .pass : .fail, label: "\(requirement.environmentVariable) is \(set ? "set" : "missing")"))
@@ -118,18 +118,5 @@ public enum Doctor {
 
     private static func plural(_ count: Int, _ singular: String) -> String {
         "\(count) \(count == 1 ? singular : singular + "s")"
-    }
-
-    private static func readEnv(root: URL) -> [String: String] {
-        let file = root.appendingPathComponent(".env")
-        guard let source = try? String(contentsOf: file, encoding: .utf8) else { return [:] }
-        var output: [String: String] = [:]
-        for line in source.components(separatedBy: .newlines) {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
-            let parts = trimmed.split(separator: "=", maxSplits: 1).map(String.init)
-            if parts.count == 2 { output[parts[0]] = parts[1] }
-        }
-        return output
     }
 }

@@ -121,22 +121,25 @@ public enum ContentLoader {
                     try normalizeCollectionItem(parseMarkdownFile($0, config: config), collection: name, root: root)
                 }
                 .filter { $0.frontmatter["status"]?.string?.lowercased() != "draft" }
-                .sorted(by: compareCollectionItems)
-            collections[name] = items
+            collections[name] = sortCollectionItems(items)
         }
         return collections
     }
 
     public static func normalizePost(_ parsed: ParsedMarkdown, config: InksteadWriterConfig, root: URL) throws -> NormalizedPost {
-        guard let dateText = parsed.frontmatter["date"]?.string, let date = parseDate(dateText) else {
+        guard let dateValue = parsed.frontmatter["date"] else {
             throw InksteadWriterError.config("\(parsed.path.path) is missing required date frontmatter.")
+        }
+        let dateText = dateValue.string ?? String(describing: frontmatterValue(dateValue))
+        guard let date = parseDate(dateText) else {
+            throw InksteadWriterError.config("\(parsed.path.path) could not parse date '\(dateText)' (expected ISO 8601, e.g. 2026-06-09T12:00:00Z or 2026-06-09).")
         }
         let lastmod = parsed.frontmatter["lastmod"]?.string.flatMap(parseDate)
         let title = parsed.frontmatter["title"]?.string
         let frontmatterPhotos = parsed.frontmatter["photos"]?.stringArray ?? []
         let bodyImages = images(in: parsed.body)
         let kind = inferKind(title: title, photos: frontmatterPhotos, bodyImages: bodyImages)
-        let urlPath = postUrlPath(parsed: parsed, config: config, date: date)
+        let urlPath = postUrlPath(parsed: parsed, config: config, date: date, timeZone: try siteTimeZone(config))
         let excerpt = excerptData(parsed: parsed, config: config)
         let categories = uniqueCategories(directoryCategories(file: parsed.path, root: root, config: config) + frontmatterCategories(parsed.frontmatter))
         let syndication = parsed.frontmatter["syndication"]?.object ?? [:]
@@ -220,27 +223,78 @@ public enum ContentLoader {
             .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
     }
 
+    private static let dateFormatters = DateFormatters()
+
+    public static let utcTimeZone = TimeZone(identifier: "UTC")!
+
+    private static let utcCalendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }()
+
+    public static func siteTimeZone(_ config: InksteadWriterConfig) throws -> TimeZone {
+        guard let identifier = config.site.timezone, !identifier.isEmpty else { return utcTimeZone }
+        guard let timeZone = TimeZone(identifier: identifier) else {
+            throw InksteadWriterError.config("site.timezone '\(identifier)' is not a valid timezone identifier (e.g. Europe/Lisbon).")
+        }
+        return timeZone
+    }
+
+    private final class DateFormatters: @unchecked Sendable {
+        let isoFractional: ISO8601DateFormatter
+        let iso: ISO8601DateFormatter
+        private let lock = NSLock()
+        private let utcDateTime: DateFormatter
+        private let utcDateOnly: DateFormatter
+        private let display: DateFormatter
+
+        init() {
+            isoFractional = ISO8601DateFormatter()
+            isoFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            iso = ISO8601DateFormatter()
+            iso.formatOptions = [.withInternetDateTime]
+            utcDateTime = Self.utcFormatter("yyyy-MM-dd'T'HH:mm:ss")
+            utcDateOnly = Self.utcFormatter("yyyy-MM-dd")
+            display = Self.utcFormatter("MMMM d, yyyy")
+        }
+
+        private static func utcFormatter(_ format: String) -> DateFormatter {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(identifier: "UTC")
+            formatter.dateFormat = format
+            return formatter
+        }
+
+        func fallbackDate(from value: String) -> Date? {
+            lock.lock()
+            defer { lock.unlock() }
+            return utcDateTime.date(from: value) ?? utcDateOnly.date(from: value)
+        }
+
+        func displayString(from date: Date, timeZone: TimeZone) -> String {
+            lock.lock()
+            defer { lock.unlock() }
+            if display.timeZone != timeZone {
+                display.timeZone = timeZone
+            }
+            return display.string(from: date)
+        }
+    }
+
     public static func parseDate(_ value: String) -> Date? {
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = iso.date(from: value) { return date }
-        iso.formatOptions = [.withInternetDateTime]
-        if let date = iso.date(from: value) { return date }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-        return formatter.date(from: value)
+        if let date = dateFormatters.isoFractional.date(from: value) { return date }
+        if let date = dateFormatters.iso.date(from: value) { return date }
+        return dateFormatters.fallbackDate(from: value)
     }
 
-    public static func dateDisplay(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "MMMM d, yyyy"
-        return formatter.string(from: date)
+    public static func dateDisplay(_ date: Date, timeZone: TimeZone = ContentLoader.utcTimeZone) -> String {
+        dateFormatters.displayString(from: date, timeZone: timeZone)
     }
 
-    public static func dateLongDisplay(_ date: Date) -> String {
-        dateDisplay(date)
+    public static func dateLongDisplay(_ date: Date, timeZone: TimeZone = ContentLoader.utcTimeZone) -> String {
+        dateDisplay(date, timeZone: timeZone)
     }
 
     public static func frontmatterDictionary(_ values: [String: FrontmatterValue]) -> [String: Any] {
@@ -276,35 +330,52 @@ public enum ContentLoader {
         }.sorted { $0.path < $1.path }
     }
 
-    private static func compareCollectionItems(_ left: CustomCollectionItem, _ right: CustomCollectionItem) -> Bool {
-        let leftOrder = left.frontmatter["order"]?.number
-        let rightOrder = right.frontmatter["order"]?.number
-        if let leftOrder, let rightOrder, leftOrder != rightOrder {
-            return leftOrder < rightOrder
-        }
-        if leftOrder != nil { return true }
-        if rightOrder != nil { return false }
+    private struct CollectionSortKey {
+        var order: Double?
+        var date: Date?
+        var title: String?
+        var relativePath: String
 
-        let leftDate = left.frontmatter["date"]?.string.flatMap(parseDate)
-        let rightDate = right.frontmatter["date"]?.string.flatMap(parseDate)
-        if let leftDate, let rightDate, leftDate != rightDate {
-            return leftDate > rightDate
+        init(_ item: CustomCollectionItem) {
+            order = item.frontmatter["order"]?.number
+            date = item.frontmatter["date"]?.string.flatMap(parseDate)
+            title = item.frontmatter["title"]?.string
+            relativePath = item.relativePath
         }
-        if leftDate != nil { return true }
-        if rightDate != nil { return false }
+    }
 
-        let leftTitle = left.frontmatter["title"]?.string
-        let rightTitle = right.frontmatter["title"]?.string
-        if let leftTitle, let rightTitle, leftTitle != rightTitle {
+    private static func sortCollectionItems(_ items: [CustomCollectionItem]) -> [CustomCollectionItem] {
+        items.map { (item: $0, key: CollectionSortKey($0)) }
+            .sorted { compareCollectionItems($0.key, $1.key) }
+            .map(\.item)
+    }
+
+    private static func compareCollectionItems(_ left: CollectionSortKey, _ right: CollectionSortKey) -> Bool {
+        if let leftOrder = left.order, let rightOrder = right.order {
+            if leftOrder != rightOrder { return leftOrder < rightOrder }
+        } else if left.order != nil {
+            return true
+        } else if right.order != nil {
+            return false
+        }
+
+        if let leftDate = left.date, let rightDate = right.date {
+            if leftDate != rightDate { return leftDate > rightDate }
+        } else if left.date != nil {
+            return true
+        } else if right.date != nil {
+            return false
+        }
+
+        if let leftTitle = left.title, let rightTitle = right.title, leftTitle != rightTitle {
             return leftTitle.localizedCaseInsensitiveCompare(rightTitle) == .orderedAscending
         }
         return left.relativePath < right.relativePath
     }
 
     private static func relativePath(_ url: URL, root: URL) -> String {
-        url.standardizedFileURL.path
-            .replacingOccurrences(of: root.standardizedFileURL.path, with: "")
-            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        FileTreeSupport.relativePath(of: url, under: root)
+            ?? url.standardizedFileURL.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     }
 
     private static func inferKind(title: String?, photos: [String], bodyImages: [String]) -> PostKind {
@@ -313,11 +384,13 @@ public enum ContentLoader {
         return .note
     }
 
-    private static func postUrlPath(parsed: ParsedMarkdown, config: InksteadWriterConfig, date: Date) -> String {
+    private static func postUrlPath(parsed: ParsedMarkdown, config: InksteadWriterConfig, date: Date, timeZone: TimeZone) -> String {
         if let url = parsed.frontmatter["url"]?.string { return url }
         let slug = parsed.slug.replacingOccurrences(of: #"^\d{4}-\d{2}-\d{2}-"#, with: "", options: .regularExpression)
         if config.urls?.posts == .slug { return "/posts/\(slug)/" }
-        let parts = Calendar(identifier: .gregorian).dateComponents([.year, .month, .day], from: date)
+        var calendar = utcCalendar
+        calendar.timeZone = timeZone
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "/%04d/%02d/%02d/%@/", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0, slug)
     }
 
@@ -372,10 +445,9 @@ public enum ContentLoader {
     }
 
     private static func directoryCategories(file: URL, root: URL, config: InksteadWriterConfig) -> [String] {
-        let postsRoot = root.appendingPathComponent(config.content.posts).standardizedFileURL
-        let directory = file.deletingLastPathComponent().standardizedFileURL
-        let relative = directory.path.replacingOccurrences(of: postsRoot.path, with: "").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        if relative.isEmpty { return [] }
+        let postsRoot = root.appendingPathComponent(config.content.posts)
+        let directory = file.deletingLastPathComponent()
+        guard let relative = FileTreeSupport.relativePath(of: directory, under: postsRoot), !relative.isEmpty else { return [] }
         return relative.split(separator: "/").map { segment in
             segment.replacingOccurrences(of: #"[-_]+"#, with: " ", options: .regularExpression)
                 .split(separator: " ")
@@ -410,20 +482,127 @@ public enum ContentLoader {
     }
 
     private static func excerptData(parsed: ParsedMarkdown, config: InksteadWriterConfig, wordLimit: Int = 70) -> (summary: String?, html: String, hasMore: Bool) {
-        let summary = parsed.frontmatter["summary"]?.string?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let summary = parsed.frontmatter["summary"]?.string?.trimmingCharacters(in: .whitespacesAndNewlines) {
+            return (summary, MarkdownRenderer.render(summary, config: config), true)
+        }
         let body = parsed.body.trimmingCharacters(in: .whitespacesAndNewlines)
         let moreParts = body.components(separatedBy: "<!--more-->")
-        let source = summary ?? (moreParts.count > 1 ? moreParts[0].trimmingCharacters(in: .whitespacesAndNewlines) : body)
-        let sourceHTML = MarkdownRenderer.render(source, config: config)
-        if summary != nil || moreParts.count > 1 {
-            return (summary, sourceHTML, true)
+        if moreParts.count > 1 {
+            let intro = moreParts[0].trimmingCharacters(in: .whitespacesAndNewlines)
+            return (nil, MarkdownRenderer.render(intro, config: config), true)
         }
-        let stripped = sourceHTML
-            .replacingOccurrences(of: #"<(img|video|audio|figure)\b[\s\S]*?(?:</\1>|>)"#, with: "", options: [.regularExpression, .caseInsensitive])
-        let words = stripped.split(separator: " ")
-        if words.count <= wordLimit {
-            return (nil, stripped, false)
+        guard let blocks = topLevelHTMLBlocks(parsed.html) else {
+            // Raw HTML in the post broke block detection; a plain-text excerpt
+            // beats emitting unbalanced markup into every index page.
+            let stripped = plainExcerptText(from: parsed.html)
+            let words = stripped.split(separator: " ")
+            if words.count <= wordLimit {
+                return (nil, stripped, false)
+            }
+            return (nil, "<p>" + words.prefix(wordLimit).joined(separator: " ") + "…</p>", true)
         }
-        return (nil, words.prefix(wordLimit).joined(separator: " ") + "…", true)
+
+        var kept: [String] = []
+        var wordCount = 0
+        var index = 0
+        var truncatedMidBlock = false
+        while index < blocks.count {
+            let block = stripMedia(from: blocks[index])
+            index += 1
+            let text = plainExcerptText(from: block)
+            if text.isEmpty { continue }
+            let words = text.split(separator: " ").count
+            if kept.isEmpty && words > wordLimit * 3 / 2 {
+                // A single opening block far over the limit: fall back to a
+                // word-truncated paragraph rather than a huge excerpt.
+                let truncated = text.split(separator: " ").prefix(wordLimit).joined(separator: " ")
+                kept.append("<p>\(truncated)…</p>")
+                wordCount += words
+                truncatedMidBlock = true
+                break
+            }
+            kept.append(block)
+            wordCount += words
+            if wordCount >= wordLimit { break }
+        }
+        let remainingText = blocks[min(index, blocks.count)...]
+            .map { plainExcerptText(from: stripMedia(from: $0)) }
+            .contains { !$0.isEmpty }
+        let hasMore = truncatedMidBlock || remainingText
+        var html = kept.joined(separator: "\n")
+        if hasMore && !truncatedMidBlock {
+            if html.hasSuffix("</p>") {
+                html = String(html.dropLast(4)) + "…</p>"
+            } else {
+                html += "\n<p>…</p>"
+            }
+        }
+        return (nil, html, hasMore)
+    }
+
+    private static func stripMedia(from html: String) -> String {
+        html
+            .replacingOccurrences(of: #"<(figure|video|audio)\b[^>]*>[\s\S]*?</\1\s*>"#, with: " ", options: [.regularExpression, .caseInsensitive])
+            .replacingOccurrences(of: #"<img\b[^>]*>"#, with: " ", options: [.regularExpression, .caseInsensitive])
+    }
+
+    private static func plainExcerptText(from html: String) -> String {
+        stripMedia(from: html)
+            .replacingOccurrences(of: #"<[^>]+>"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+    }
+
+    private static let voidHTMLTags: Set<String> = [
+        "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"
+    ]
+
+    /// Splits rendered HTML into complete top-level elements, or nil when the
+    /// markup is unbalanced (possible with raw HTML passthrough in posts).
+    /// The Markdown renderer escapes `<` in text and code, so every literal
+    /// `<` in its output starts a real tag.
+    static func topLevelHTMLBlocks(_ html: String) -> [String]? {
+        var blocks: [String] = []
+        var current = ""
+        var depth = 0
+        var index = html.startIndex
+
+        func flush() {
+            let block = current.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !block.isEmpty { blocks.append(block) }
+            current = ""
+        }
+
+        while index < html.endIndex {
+            guard html[index] == "<", let close = html[index...].firstIndex(of: ">") else {
+                current.append(html[index])
+                index = html.index(after: index)
+                continue
+            }
+            let tag = String(html[index...close])
+            index = html.index(after: close)
+            current += tag
+            if tag.hasPrefix("<!") {
+                if depth == 0 { flush() }
+                continue
+            }
+            let isClosing = tag.hasPrefix("</")
+            let nameStart = tag.index(tag.startIndex, offsetBy: isClosing ? 2 : 1)
+            let name = tag[nameStart...].prefix { $0.isLetter || $0.isNumber }.lowercased()
+            if name.isEmpty { return nil }
+            if isClosing {
+                depth -= 1
+                if depth < 0 { return nil }
+                if depth == 0 { flush() }
+            } else if !voidHTMLTags.contains(name) && !tag.hasSuffix("/>") {
+                depth += 1
+            } else if depth == 0 {
+                flush()
+            }
+        }
+        guard depth == 0 else { return nil }
+        let leftover = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard leftover.isEmpty else { return nil }
+        return blocks
     }
 }

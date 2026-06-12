@@ -9,40 +9,44 @@ public enum Publish {
             try SiteBuilder.build(root: root, config: config, log: { print($0) })
         },
         deploy: (URL, InksteadWriterConfig) async throws -> Void = { root, config in try await Deploy.deploySite(root: root, config: config) },
-        syndicate: (URL, InksteadWriterConfig) async -> SyndicationSummary = { root, config in await Syndicator.syndicateSite(root: root, config: config) },
-        commit: (URL) throws -> Void = { root in _ = try commitSyndicationChanges(root: root) },
+        syndicate: (URL, InksteadWriterConfig) async throws -> SyndicationSummary = { root, config in try await Syndicator.syndicateSite(root: root, config: config) },
+        commit: (URL, InksteadWriterConfig) throws -> Void = { root, config in _ = try commitSyndicationChanges(root: root, config: config) },
         log: (String) -> Void = { print($0) }
     ) async throws -> SyndicationSummary {
         let publishStarted = Date()
         let buildStarted = Date()
         try build(root, config)
-        log("Build completed in \(formatDuration(since: buildStarted)).")
+        log("Build completed in \(BuildFormatting.formatDuration(since: buildStarted)).")
 
         let deployStarted = Date()
         try await deploy(root, config)
-        log("Deploy completed in \(formatDuration(since: deployStarted)).")
+        log("Deploy completed in \(BuildFormatting.formatDuration(since: deployStarted)).")
 
         let syndicationStarted = Date()
-        let result = await syndicate(root, config)
-        log("Syndication completed in \(formatDuration(since: syndicationStarted)). Published: \(result.published). Failed: \(result.failed).")
+        let result = try await syndicate(root, config)
+        log("Syndication completed in \(BuildFormatting.formatDuration(since: syndicationStarted)). Published: \(result.published). Failed: \(result.failed).")
         if result.changed {
             let rebuildStarted = Date()
             try build(root, config)
-            log("Post-syndication rebuild completed in \(formatDuration(since: rebuildStarted)).")
+            log("Post-syndication rebuild completed in \(BuildFormatting.formatDuration(since: rebuildStarted)).")
             let redeployStarted = Date()
             try await deploy(root, config)
-            log("Post-syndication redeploy completed in \(formatDuration(since: redeployStarted)).")
+            log("Post-syndication redeploy completed in \(BuildFormatting.formatDuration(since: redeployStarted)).")
             let commitStarted = Date()
-            try commit(root)
-            log("Syndication commit completed in \(formatDuration(since: commitStarted)).")
+            try commit(root, config)
+            log("Syndication commit completed in \(BuildFormatting.formatDuration(since: commitStarted)).")
         }
-        log("Publish completed in \(formatDuration(since: publishStarted)).")
+        log("Publish completed in \(BuildFormatting.formatDuration(since: publishStarted)).")
+        if result.failed > 0 {
+            log("Syndication failed for \(result.failed) target\(result.failed == 1 ? "" : "s"); the failures are recorded in the post frontmatter. Remove a failed entry from a post's syndication block to try that target again.")
+        }
         return result
     }
 
     @discardableResult
     public static func commitSyndicationChanges(
         root: URL,
+        config: InksteadWriterConfig,
         env: [String: String] = ProcessInfo.processInfo.environment,
         run: (DeployCommand, URL) throws -> Int32 = runCommand
     ) throws -> [DeployCommand] {
@@ -62,22 +66,29 @@ public enum Publish {
             return try run(command, root)
         }
 
-        _ = try execute(["config", "user.name", name])
-        _ = try execute(["config", "user.email", email])
-        _ = try execute(["add", "content/posts"])
+        func require(_ arguments: [String]) throws {
+            let status = try execute(arguments)
+            guard status == 0 else {
+                throw InksteadWriterError.io("git \(arguments.joined(separator: " ")) exited with status \(status).")
+            }
+        }
+
+        try require(["config", "user.name", name])
+        try require(["config", "user.email", email])
+        try require(["add", config.content.posts])
         let commitStatus = try execute(["commit", "-m", "Update syndication data [skip ci]"])
         guard commitStatus == 0 else { return executed }
 
         if isGitLab, let token = env["CI_JOB_TOKEN"], let host = env["CI_SERVER_HOST"], let project = env["CI_PROJECT_PATH"], !token.isEmpty, !host.isEmpty, !project.isEmpty {
-            _ = try execute(["remote", "set-url", "origin", "https://gitlab-ci-token:\(token)@\(host)/\(project).git"])
+            try require(["remote", "set-url", "origin", "https://gitlab-ci-token:\(token)@\(host)/\(project).git"])
         }
 
         if isGitLab, let branch = env["CI_COMMIT_BRANCH"], !branch.isEmpty {
-            _ = try execute(["push", "origin", "HEAD:\(branch)"])
+            try require(["push", "origin", "HEAD:\(branch)"])
         } else if isForgejo, let branch = env["FORGEJO_REF_NAME"], !branch.isEmpty {
-            _ = try execute(["push", "origin", "HEAD:\(branch)"])
+            try require(["push", "origin", "HEAD:\(branch)"])
         } else {
-            _ = try execute(["push"])
+            try require(["push"])
         }
 
         return executed
@@ -89,13 +100,5 @@ public enum Publish {
         try process.run()
         process.waitUntilExit()
         return process.terminationStatus
-    }
-
-    private static func formatDuration(since start: Date) -> String {
-        let seconds = Date().timeIntervalSince(start)
-        if seconds < 10 {
-            return String(format: "%.2fs", seconds)
-        }
-        return String(format: "%.1fs", seconds)
     }
 }

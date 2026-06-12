@@ -57,9 +57,10 @@ Example:
   "provider": "github",
   "repo": "site",
   "siteName": "My Website",
-  "syndicationProviders": ["mastodon"],
-  "version": "2.0.5"
+  "syndicationProviders": ["mastodon"]
 }
 ```
+
+The file also includes a `version` field recording the Inkstead Writer release that built the site.
 
 Authentication happens in the app. Inkstead Writer never writes access tokens into the built website.

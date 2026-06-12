@@ -7,422 +7,6 @@ import CoreGraphics
 import ImageIO
 #endif
 
-public struct ImageOptimizationOptions: Equatable, Sendable {
-    public var enabled: Bool
-    public var maxWidth: Int
-    public var maxHeight: Int
-    public var quality: Int
-
-    public init(enabled: Bool = true, maxWidth: Int = 2400, maxHeight: Int = 2400, quality: Int = 82) {
-        self.enabled = enabled
-        self.maxWidth = maxWidth
-        self.maxHeight = maxHeight
-        self.quality = quality
-    }
-}
-
-public struct ImageOptimizationSummary: Equatable, Sendable {
-    public var checked: Int
-    public var reusedFromCache: Int
-    public var generatedCacheEntries: Int
-    public var copiedWithoutOptimization: Int
-    public var unchangedCopies: Int
-
-    public init(
-        checked: Int = 0,
-        reusedFromCache: Int = 0,
-        generatedCacheEntries: Int = 0,
-        copiedWithoutOptimization: Int = 0,
-        unchangedCopies: Int = 0
-    ) {
-        self.checked = checked
-        self.reusedFromCache = reusedFromCache
-        self.generatedCacheEntries = generatedCacheEntries
-        self.copiedWithoutOptimization = copiedWithoutOptimization
-        self.unchangedCopies = unchangedCopies
-    }
-
-    public var isEmpty: Bool {
-        checked == 0
-    }
-
-    public var cacheMisses: Int {
-        generatedCacheEntries
-    }
-
-    mutating func add(_ outcome: ImageOptimizationOutcome) {
-        checked += 1
-        switch outcome {
-        case .reusedFromCache:
-            reusedFromCache += 1
-        case .generatedCacheEntry:
-            generatedCacheEntries += 1
-        case .copiedWithoutOptimization:
-            copiedWithoutOptimization += 1
-        case .unchangedCopy:
-            unchangedCopies += 1
-        }
-    }
-
-    mutating func merge(_ other: ImageOptimizationSummary) {
-        checked += other.checked
-        reusedFromCache += other.reusedFromCache
-        generatedCacheEntries += other.generatedCacheEntries
-        copiedWithoutOptimization += other.copiedWithoutOptimization
-        unchangedCopies += other.unchangedCopies
-    }
-}
-
-public struct ImageDimensions: Equatable {
-    public var width: Int
-    public var height: Int
-
-    public init(width: Int, height: Int) {
-        self.width = width
-        self.height = height
-    }
-
-    public func scaledToFit(maxWidth: Int, maxHeight: Int) -> ImageDimensions {
-        let scale = min(1.0, Double(maxWidth) / Double(width), Double(maxHeight) / Double(height))
-        return ImageDimensions(
-            width: max(1, Int(Double(width) * scale)),
-            height: max(1, Int(Double(height) * scale))
-        )
-    }
-}
-
-public enum ImageOptimizer {
-    public static var isAvailable: Bool {
-        true
-    }
-
-    public static func options(config: InksteadWriterConfig) -> ImageOptimizationOptions {
-        ImageOptimizationOptions(
-            enabled: config.media?.optimize ?? true,
-            maxWidth: config.media?.maxWidth ?? 2400,
-            maxHeight: config.media?.maxHeight ?? 2400,
-            quality: config.media?.quality ?? 82
-        )
-    }
-
-    @discardableResult
-    public static func optimizeBuiltImages(
-        root: URL,
-        config: InksteadWriterConfig,
-        cacheRoot: URL? = nil
-    ) throws -> ImageOptimizationSummary {
-        let options = options(config: config)
-        guard options.enabled else { return ImageOptimizationSummary() }
-        let files = imageFiles(root: root)
-        guard !files.isEmpty else { return ImageOptimizationSummary() }
-        let cacheRoot = cacheRoot ?? mediaCacheRoot()
-        let workerCount = BuildConcurrency.workerCount(for: files.count)
-        let queue = OperationQueue()
-        queue.maxConcurrentOperationCount = workerCount
-        let errors = ImageOptimizationErrorBox()
-        let summary = ImageOptimizationSummaryBox()
-
-        for file in files {
-            queue.addOperation {
-                do {
-                    summary.add(try optimizeImage(at: file, options: options, cacheRoot: cacheRoot))
-                } catch {
-                    errors.setIfEmpty(error)
-                }
-            }
-        }
-        queue.waitUntilAllOperationsAreFinished()
-
-        if let firstError = errors.firstError {
-            throw firstError
-        }
-        return summary.value
-    }
-
-    @discardableResult
-    public static func copyOptimizedMedia(
-        from source: URL,
-        to destination: URL,
-        config: InksteadWriterConfig,
-        cacheRoot: URL? = nil
-    ) throws -> ImageOptimizationSummary {
-        guard FileManager.default.fileExists(atPath: source.path) else { return ImageOptimizationSummary() }
-        let options = options(config: config)
-        let cacheRoot = cacheRoot ?? mediaCacheRoot()
-        let values = try source.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
-        if values.isDirectory == true {
-            return try copyMediaDirectory(source, to: destination, options: options, cacheRoot: cacheRoot)
-        } else if values.isRegularFile == true {
-            var summary = ImageOptimizationSummary()
-            summary.add(try copyMediaFile(source, to: destination, options: options, cacheRoot: cacheRoot))
-            return summary
-        }
-        return ImageOptimizationSummary()
-    }
-
-    public static func dimensions(of url: URL, cacheRoot: URL? = nil) throws -> ImageDimensions? {
-        let cacheRoot = (cacheRoot ?? mediaCacheRoot()).appendingPathComponent("dimensions-v2")
-        let cacheURL = try cachedImageDimensionsURL(source: url, cacheRoot: cacheRoot)
-        if let cached = try cachedImageDimensions(at: cacheURL) {
-            return cached
-        }
-        let dimensions = try ImageEncoder.dimensions(of: url)
-        if let dimensions {
-            try storeImageDimensions(dimensions, at: cacheURL)
-        }
-        return dimensions
-    }
-
-    private static func imageFiles(root: URL) -> [URL] {
-        guard FileManager.default.fileExists(atPath: root.path),
-              let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey]) else {
-            return []
-        }
-        return enumerator.compactMap { item in
-            guard let url = item as? URL,
-                  (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true,
-                  ImageEncoder.isSupportedImage(url) else {
-                return nil
-            }
-            return url
-        }
-    }
-
-    private static func copyMediaDirectory(
-        _ source: URL,
-        to destination: URL,
-        options: ImageOptimizationOptions,
-        cacheRoot: URL
-    ) throws -> ImageOptimizationSummary {
-        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
-        guard let enumerator = FileManager.default.enumerator(at: source, includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey]) else {
-            return ImageOptimizationSummary()
-        }
-        var files: [(source: URL, target: URL)] = []
-        for case let item as URL in enumerator {
-            let relative = item.standardizedFileURL.path
-                .replacingOccurrences(of: source.standardizedFileURL.path, with: "")
-                .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            guard !relative.isEmpty else { continue }
-            let target = destination.appendingPathComponent(relative)
-            let values = try item.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
-            if values.isDirectory == true {
-                try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
-            } else if values.isRegularFile == true {
-                files.append((item, target))
-            }
-        }
-        guard !files.isEmpty else { return ImageOptimizationSummary() }
-
-        let workerCount = BuildConcurrency.workerCount(for: files.count)
-        let queue = OperationQueue()
-        queue.maxConcurrentOperationCount = workerCount
-        let errors = ImageOptimizationErrorBox()
-        let summary = ImageOptimizationSummaryBox()
-        for file in files {
-            queue.addOperation {
-                do {
-                    summary.add(try copyMediaFile(file.source, to: file.target, options: options, cacheRoot: cacheRoot))
-                } catch {
-                    errors.setIfEmpty(error)
-                }
-            }
-        }
-        queue.waitUntilAllOperationsAreFinished()
-
-        if let firstError = errors.firstError {
-            throw firstError
-        }
-        return summary.value
-    }
-
-    private static func copyMediaFile(
-        _ source: URL,
-        to destination: URL,
-        options: ImageOptimizationOptions,
-        cacheRoot: URL
-    ) throws -> ImageOptimizationOutcome {
-        try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-        guard options.enabled, ImageEncoder.isSupportedImage(source) else {
-            if FileManager.default.fileExists(atPath: destination.path),
-               try filesHaveSameContents(source, destination) {
-                return .unchangedCopy
-            }
-            if FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.removeItem(at: destination)
-            }
-            try FileManager.default.copyItem(at: source, to: destination)
-            return .copiedWithoutOptimization
-        }
-
-        let cacheURL = try cachedOptimizedImageURL(source: source, options: options, cacheRoot: cacheRoot)
-        if FileManager.default.fileExists(atPath: cacheURL.path) {
-            if FileManager.default.fileExists(atPath: destination.path),
-               try filesHaveSameContents(cacheURL, destination) {
-                return .reusedFromCache
-            }
-            if FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.removeItem(at: destination)
-            }
-            try FileManager.default.copyItem(at: cacheURL, to: destination)
-            return .reusedFromCache
-        }
-
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try FileManager.default.removeItem(at: destination)
-        }
-        try FileManager.default.copyItem(at: source, to: destination)
-        try ImageEncoder.optimizeImage(at: destination, options: options)
-        try storeOptimizedImageCache(from: destination, to: cacheURL)
-        return .generatedCacheEntry
-    }
-
-    private static func optimizeImage(at url: URL, options: ImageOptimizationOptions, cacheRoot: URL) throws -> ImageOptimizationOutcome {
-        let cacheURL = try cachedOptimizedImageURL(source: url, options: options, cacheRoot: cacheRoot)
-        if FileManager.default.fileExists(atPath: cacheURL.path) {
-            try replaceFile(at: url, with: cacheURL)
-            return .reusedFromCache
-        }
-
-        try ImageEncoder.optimizeImage(at: url, options: options)
-        try storeOptimizedImageCache(from: url, to: cacheURL)
-        return .generatedCacheEntry
-    }
-
-    private static func cachedOptimizedImageURL(
-        source: URL,
-        options: ImageOptimizationOptions,
-        cacheRoot: URL
-    ) throws -> URL {
-        let values = try source.resourceValues(forKeys: [.fileSizeKey])
-        let fingerprintInput = [
-            "media-v3",
-            source.standardizedFileURL.path,
-            String(values.fileSize ?? 0),
-            try contentHash(of: source),
-            String(options.maxWidth),
-            String(options.maxHeight),
-            String(options.quality),
-            source.pathExtension.lowercased()
-        ].joined(separator: "\n")
-        let key = SHA256.hex(Data(fingerprintInput.utf8))
-        let ext = source.pathExtension.isEmpty ? "bin" : source.pathExtension.lowercased()
-        return cacheRoot
-            .appendingPathComponent("v3")
-            .appendingPathComponent(String(key.prefix(2)))
-            .appendingPathComponent("\(key).\(ext)")
-    }
-
-    private static func cachedImageDimensionsURL(source: URL, cacheRoot: URL) throws -> URL {
-        let values = try source.resourceValues(forKeys: [.fileSizeKey])
-        let fingerprintInput = [
-            "dimensions-v2",
-            source.standardizedFileURL.path,
-            String(values.fileSize ?? 0),
-            try contentHash(of: source),
-            source.pathExtension.lowercased()
-        ].joined(separator: "\n")
-        let key = SHA256.hex(Data(fingerprintInput.utf8))
-        return cacheRoot
-            .appendingPathComponent(String(key.prefix(2)))
-            .appendingPathComponent("\(key).txt")
-    }
-
-    private static func cachedImageDimensions(at url: URL) throws -> ImageDimensions? {
-        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-        let parts = try String(contentsOf: url, encoding: .utf8)
-            .split(separator: " ")
-            .compactMap { Int($0) }
-        guard parts.count == 2 else { return nil }
-        return ImageDimensions(width: parts[0], height: parts[1])
-    }
-
-    private static func storeImageDimensions(_ dimensions: ImageDimensions, at url: URL) throws {
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try "\(dimensions.width) \(dimensions.height)".write(to: url, atomically: true, encoding: .utf8)
-    }
-
-    private static func storeOptimizedImageCache(from source: URL, to cacheURL: URL) throws {
-        try FileManager.default.createDirectory(at: cacheURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        guard !FileManager.default.fileExists(atPath: cacheURL.path) else { return }
-        let temporary = cacheURL.deletingLastPathComponent().appendingPathComponent(".\(UUID().uuidString)-\(cacheURL.lastPathComponent)")
-        try FileManager.default.copyItem(at: source, to: temporary)
-        do {
-            try FileManager.default.moveItem(at: temporary, to: cacheURL)
-        } catch {
-            try? FileManager.default.removeItem(at: temporary)
-            if !FileManager.default.fileExists(atPath: cacheURL.path) {
-                throw error
-            }
-        }
-    }
-
-    private static func replaceFile(at destination: URL, with source: URL) throws {
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try FileManager.default.removeItem(at: destination)
-        }
-        try FileManager.default.copyItem(at: source, to: destination)
-    }
-
-    private static func filesHaveSameContents(_ lhs: URL, _ rhs: URL) throws -> Bool {
-        let leftValues = try lhs.resourceValues(forKeys: [.fileSizeKey])
-        let rightValues = try rhs.resourceValues(forKeys: [.fileSizeKey])
-        guard leftValues.fileSize == rightValues.fileSize else { return false }
-        return try Data(contentsOf: lhs) == Data(contentsOf: rhs)
-    }
-
-    private static func contentHash(of url: URL) throws -> String {
-        try SHA256.hex(Data(contentsOf: url))
-    }
-
-    private static func mediaCacheRoot(environment: [String: String] = ProcessInfo.processInfo.environment) -> URL {
-        InksteadWriterReleaseResolver.cacheRoot(environment: environment).appendingPathComponent("media")
-    }
-}
-
-enum ImageOptimizationOutcome {
-    case reusedFromCache
-    case generatedCacheEntry
-    case copiedWithoutOptimization
-    case unchangedCopy
-}
-
-private final class ImageOptimizationErrorBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var storedError: Error?
-
-    var firstError: Error? {
-        lock.lock()
-        defer { lock.unlock() }
-        return storedError
-    }
-
-    func setIfEmpty(_ error: Error) {
-        lock.lock()
-        if storedError == nil {
-            storedError = error
-        }
-        lock.unlock()
-    }
-}
-
-private final class ImageOptimizationSummaryBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var summary = ImageOptimizationSummary()
-
-    var value: ImageOptimizationSummary {
-        lock.lock()
-        defer { lock.unlock() }
-        return summary
-    }
-
-    func add(_ outcome: ImageOptimizationOutcome) {
-        lock.lock()
-        summary.add(outcome)
-        lock.unlock()
-    }
-}
-
 enum ImageEncoder {
     static func isSupportedImage(_ url: URL) -> Bool {
         let ext = url.pathExtension.lowercased()
@@ -436,11 +20,12 @@ enum ImageEncoder {
         #endif
     }
 
-    static func optimizeImage(at url: URL, options: ImageOptimizationOptions) throws {
+    @discardableResult
+    static func optimizeImage(at url: URL, options: ImageOptimizationOptions) throws -> Bool {
         let original = try Data(contentsOf: url)
         if (try? RasterImageEncoder.optimizeImage(at: url, options: options)) == true {
             try keepSmallerImage(at: url, original: original)
-            return
+            return true
         }
         #if canImport(CoreGraphics) && canImport(ImageIO)
         if let data = try PlatformImageEncoder.encodeImage(
@@ -453,11 +38,10 @@ enum ImageEncoder {
             if data.count < original.count {
                 try data.write(to: url, options: .atomic)
             }
+            return true
         }
-        #else
-        _ = url
-        _ = options
         #endif
+        return false
     }
 
     private static func keepSmallerImage(at url: URL, original: Data) throws {
@@ -601,6 +185,32 @@ private struct DecodedImage {
     }
 }
 
+private func rgbaBytes(of image: DecodedImage) -> [UInt8] {
+    var rgba: [UInt8] = []
+    rgba.reserveCapacity(image.pixels.count * 4)
+    for pixel in image.pixels {
+        rgba.append(pixel.r)
+        rgba.append(pixel.g)
+        rgba.append(pixel.b)
+        rgba.append(pixel.a)
+    }
+    return rgba
+}
+
+private func rgbaPixels(from rgba: [UInt8], width: Int, height: Int) -> [RGBAPixel] {
+    var pixels: [RGBAPixel] = []
+    pixels.reserveCapacity(width * height)
+    for index in stride(from: 0, to: rgba.count, by: 4) {
+        pixels.append(RGBAPixel(
+            r: rgba[index],
+            g: rgba[index + 1],
+            b: rgba[index + 2],
+            a: rgba[index + 3]
+        ))
+    }
+    return pixels
+}
+
 private enum RasterImageEncoder {
     static func optimizeImage(at url: URL, options: ImageOptimizationOptions) throws -> Bool {
         let ext = url.pathExtension.lowercased()
@@ -665,49 +275,34 @@ private enum RasterImageEncoder {
         guard let image = try decodePNG(source)?.scaledToFit(maxWidth: maxWidth, maxHeight: maxHeight) else {
             return nil
         }
-        let rgba = image.pixels.flatMap { [$0.r, $0.g, $0.b, $0.a] }
-        return Foundation.Data(try PNGCodec.encodeRGBA(width: image.width, height: image.height, rgba: rgba))
+        return Foundation.Data(try PNGCodec.encodeRGBA(width: image.width, height: image.height, rgba: rgbaBytes(of: image)))
     }
 
     private static func encodeWebP(source: URL, maxWidth: Int, maxHeight: Int, quality: Int) throws -> Foundation.Data? {
         guard let image = try decodeWebP(source)?.scaledToFit(maxWidth: maxWidth, maxHeight: maxHeight) else {
             return nil
         }
-        let pixels = image.pixels.flatMap { [$0.r, $0.g, $0.b, $0.a] }
-        let webp = WebP(width: image.width, height: image.height, rgba: pixels)
+        let webp = WebP(width: image.width, height: image.height, rgba: rgbaBytes(of: image))
         return Foundation.Data(try webp.encode(quality: Float(max(1, min(100, quality)))))
     }
 
     private static func decodePNG(_ url: URL) throws -> DecodedImage? {
         let image = try PNGCodec.decode([UInt8](Foundation.Data(contentsOf: url)))
-        var pixels: [RGBAPixel] = []
-        pixels.reserveCapacity(image.width * image.height)
-        for index in stride(from: 0, to: image.rgba.count, by: 4) {
-            pixels.append(RGBAPixel(
-                r: image.rgba[index],
-                g: image.rgba[index + 1],
-                b: image.rgba[index + 2],
-                a: image.rgba[index + 3]
-            ))
-        }
-        return DecodedImage(width: image.width, height: image.height, pixels: pixels)
+        return DecodedImage(
+            width: image.width,
+            height: image.height,
+            pixels: rgbaPixels(from: image.rgba, width: image.width, height: image.height)
+        )
     }
 
     private static func decodeWebP(_ url: URL) throws -> DecodedImage? {
         let image = try WebP.decode([UInt8](Foundation.Data(contentsOf: url)))
-        var pixels: [RGBAPixel] = []
-        pixels.reserveCapacity(image.width * image.height)
-        for index in stride(from: 0, to: image.rgba.count, by: 4) {
-            pixels.append(RGBAPixel(
-                r: image.rgba[index],
-                g: image.rgba[index + 1],
-                b: image.rgba[index + 2],
-                a: image.rgba[index + 3]
-            ))
-        }
-        return DecodedImage(width: image.width, height: image.height, pixels: pixels)
+        return DecodedImage(
+            width: image.width,
+            height: image.height,
+            pixels: rgbaPixels(from: image.rgba, width: image.width, height: image.height)
+        )
     }
-
 }
 
 private enum TurboJPEGImageEncoder {
@@ -734,18 +329,11 @@ private enum TurboJPEGImageEncoder {
         guard image.rgba.count == image.width * image.height * 4 else {
             throw JPEGTurboError.invalidPixelBuffer
         }
-        var pixels: [RGBAPixel] = []
-        pixels.reserveCapacity(image.width * image.height)
-        for index in stride(from: 0, to: image.rgba.count, by: 4) {
-            pixels.append(RGBAPixel(
-                r: image.rgba[index],
-                g: image.rgba[index + 1],
-                b: image.rgba[index + 2],
-                a: image.rgba[index + 3]
-            ))
-        }
-        return DecodedImage(width: image.width, height: image.height, pixels: pixels)
-            .oriented(JPEGMetadataReader.orientation(in: bytes))
+        return DecodedImage(
+            width: image.width,
+            height: image.height,
+            pixels: rgbaPixels(from: image.rgba, width: image.width, height: image.height)
+        ).oriented(JPEGMetadataReader.orientation(in: bytes))
     }
 
     static func encodeJPEG(_ image: DecodedImage, quality: Int) throws -> Foundation.Data {

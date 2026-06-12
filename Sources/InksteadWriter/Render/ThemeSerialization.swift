@@ -70,7 +70,16 @@ func serializeConfig(_ config: InksteadWriterConfig) -> [String: Any] {
     ]
 }
 
-func serializePost(_ post: NormalizedPost) -> [String: Any] {
+enum ThemeDateFormatting {
+    /// ISO8601DateFormatter is documented as thread-safe, so a shared instance is safe.
+    nonisolated(unsafe) private static let iso8601 = ISO8601DateFormatter()
+
+    static func iso8601String(from date: Date) -> String {
+        iso8601.string(from: date)
+    }
+}
+
+func serializePost(_ post: NormalizedPost, timeZone: TimeZone) -> [String: Any] {
     [
         "slug": post.slug,
         "kind": post.kind.rawValue,
@@ -79,11 +88,11 @@ func serializePost(_ post: NormalizedPost) -> [String: Any] {
         "html": PlumeSafeHTML(post.html),
         "excerpt": PlumeSafeHTML(post.excerpt),
         "hasMore": post.hasMore,
-        "dateIso": ISO8601DateFormatter().string(from: post.date),
-        "dateDisplay": ContentLoader.dateDisplay(post.date),
-        "dateLongDisplay": ContentLoader.dateLongDisplay(post.date),
-        "date_long_display": ContentLoader.dateLongDisplay(post.date),
-        "lastmodIso": post.lastmod.map { ISO8601DateFormatter().string(from: $0) } ?? "",
+        "dateIso": ThemeDateFormatting.iso8601String(from: post.date),
+        "dateDisplay": ContentLoader.dateDisplay(post.date, timeZone: timeZone),
+        "dateLongDisplay": ContentLoader.dateLongDisplay(post.date, timeZone: timeZone),
+        "date_long_display": ContentLoader.dateLongDisplay(post.date, timeZone: timeZone),
+        "lastmodIso": post.lastmod.map { ThemeDateFormatting.iso8601String(from: $0) } ?? "",
         "urlPath": post.urlPath,
         "canonicalUrl": post.canonicalUrl,
         "photos": post.photos,
@@ -106,18 +115,22 @@ func serializePage(_ page: NormalizedPage) -> [String: Any] {
     ]
 }
 
-func serializeCategory(_ category: CategoryCollection) -> [String: Any] {
+func serializeCategory(_ category: CategoryCollection, timeZone: TimeZone) -> [String: Any] {
+    serializeCategory(category, postsByURL: [:], timeZone: timeZone)
+}
+
+func serializeCategory(_ category: CategoryCollection, postsByURL: [String: [String: Any]], timeZone: TimeZone) -> [String: Any] {
     [
         "name": category.name,
         "slug": category.slug,
         "urlPath": category.urlPath,
         "feedPath": category.feedPath,
         "jsonFeedPath": category.feedPath.replacingOccurrences(of: "feed.xml", with: "feed.json"),
-        "posts": category.posts.map(serializePost)
+        "posts": category.posts.map { postsByURL[$0.canonicalUrl] ?? serializePost($0, timeZone: timeZone) }
     ]
 }
 
-func serializeCustomCollectionItem(_ item: CustomCollectionItem) -> [String: Any] {
+func serializeCustomCollectionItem(_ item: CustomCollectionItem, timeZone: TimeZone) -> [String: Any] {
     var output = ContentLoader.frontmatterDictionary(item.frontmatter)
     output["collection"] = item.collection
     output["slug"] = item.slug
@@ -126,10 +139,10 @@ func serializeCustomCollectionItem(_ item: CustomCollectionItem) -> [String: Any
     output["html"] = PlumeSafeHTML(item.html)
     output["content"] = PlumeSafeHTML(item.html)
     if let date = item.frontmatter["date"]?.string.flatMap(ContentLoader.parseDate) {
-        output["dateIso"] = ISO8601DateFormatter().string(from: date)
-        output["dateDisplay"] = ContentLoader.dateDisplay(date)
-        output["dateLongDisplay"] = ContentLoader.dateLongDisplay(date)
-        output["date_long_display"] = ContentLoader.dateLongDisplay(date)
+        output["dateIso"] = ThemeDateFormatting.iso8601String(from: date)
+        output["dateDisplay"] = ContentLoader.dateDisplay(date, timeZone: timeZone)
+        output["dateLongDisplay"] = ContentLoader.dateLongDisplay(date, timeZone: timeZone)
+        output["date_long_display"] = ContentLoader.dateLongDisplay(date, timeZone: timeZone)
     }
     return output
 }

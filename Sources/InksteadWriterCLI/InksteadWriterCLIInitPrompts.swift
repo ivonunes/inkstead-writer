@@ -149,7 +149,7 @@ extension InksteadWriterCLI {
         guard promptYesNo("Configure the Inkstead app connection now?", defaultValue: false) else {
             return nil
         }
-        let inferred = inferredConnectionProvider(ci: ci)
+        let inferred = AppConnectionSupport.inferredConnectionProvider(ci: ci)
         let provider: AppConnectionProviderName
         if let inferred {
             provider = inferred
@@ -182,15 +182,6 @@ extension InksteadWriterCLI {
         let branch = promptLine("Branch", defaultValue: "main")
         return AppConnectionConfig(
             provider: provider, repository: repository, branch: branch, instanceUrl: instanceURL)
-    }
-
-    static func inferredConnectionProvider(ci: CiProviderName?) -> AppConnectionProviderName? {
-        switch ci {
-        case .githubActions: .github
-        case .gitlabCi: .gitlab
-        case .forgejoActions: .forgejo
-        case nil: nil
-        }
     }
 
     static func providerLabel(_ provider: AppConnectionProviderName) -> String {
@@ -240,9 +231,9 @@ extension InksteadWriterCLI {
     }
 
     static func newPostOptions(arguments: [String]) throws -> CreatePostOptions {
-        let kindText = value(after: "--kind", in: arguments) ?? value(after: "-k", in: arguments)
-        let title = value(after: "--title", in: arguments) ?? value(after: "-t", in: arguments)
-        let text = value(after: "--text", in: arguments)
+        let kindText = try value(after: "--kind", in: arguments) ?? value(after: "-k", in: arguments)
+        let title = try value(after: "--title", in: arguments) ?? value(after: "-t", in: arguments)
+        let text = try value(after: "--text", in: arguments)
         if let kindText {
             guard let kind = NewPostKind(rawValue: kindText) else {
                 throw InksteadWriterError.config("Post kind must be article or note.")

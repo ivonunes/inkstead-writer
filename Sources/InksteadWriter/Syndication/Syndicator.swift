@@ -11,16 +11,11 @@ public enum Syndicator {
         root: URL,
         config: InksteadWriterConfig,
         env: [String: String] = ProcessInfo.processInfo.environment,
-        http: @escaping HTTPClient = DefaultHTTPClient.send
-    ) async -> SyndicationSummary {
-        let posts: [NormalizedPost]
-        do {
-            posts = try ContentLoader.loadPosts(root: root, config: config)
-        } catch {
-            return SyndicationSummary(changed: false, published: 0, failed: 1)
-        }
-
-        let mergedEnv = readEnv(root: root).merging(env) { _, new in new }
+        http: @escaping HTTPClient = DefaultHTTPClient.send,
+        log: @escaping (String) -> Void = { print($0) }
+    ) async throws -> SyndicationSummary {
+        let posts = try ContentLoader.loadPosts(root: root, config: config)
+        let mergedEnv = EnvFile.read(root: root).merging(env) { _, new in new }
         let context = SyndicationContext(root: root, env: mergedEnv, http: http)
         var changed = false
         var published = 0
@@ -28,9 +23,24 @@ public enum Syndicator {
 
         for post in posts {
             for provider in post.syndicate {
-                if post.syndication[provider.rawValue]?.object?["status"]?.string == "published" { continue }
+                if post.syndication[provider.rawValue]?.object?["status"]?.string != nil { continue }
                 if !SyndicationProviders.canSyndicate(provider, post: post) { continue }
+                let postPath = FileTreeSupport.relativePath(of: post.path, under: root) ?? post.path.path
                 let result = await SyndicationProviders.publish(provider, post: post, context: context)
+                guard result.status == .published else {
+                    failed += 1
+                    log("Syndicating \(postPath) to \(provider.rawValue) failed: \(result.fields["error"] ?? "unknown error")")
+                    do {
+                        let raw = try String(contentsOf: post.path, encoding: .utf8)
+                        let updated = SyndicationFrontmatter.update(markdown: raw, provider: provider, result: result)
+                        try updated.write(to: post.path, atomically: true, encoding: .utf8)
+                        changed = true
+                    } catch {
+                        log("Could not record the \(provider.rawValue) failure in \(postPath): \(error)")
+                    }
+                    continue
+                }
+                published += 1
                 do {
                     let raw = try String(contentsOf: post.path, encoding: .utf8)
                     let updated = SyndicationFrontmatter.update(markdown: raw, provider: provider, result: result)
@@ -38,25 +48,14 @@ public enum Syndicator {
                     changed = true
                 } catch {
                     failed += 1
-                    continue
+                    log("""
+                    ERROR: \(postPath) was published to \(provider.rawValue), but its syndication status could not be written back: \(error)
+                    Record the \(provider.rawValue) status as published in the frontmatter of \(post.path.path) manually before syndicating again, or the next run will publish a duplicate.
+                    """)
+                    return SyndicationSummary(changed: changed, published: published, failed: failed)
                 }
-                if result.status == .published { published += 1 }
-                if result.status == .failed { failed += 1 }
             }
         }
         return SyndicationSummary(changed: changed, published: published, failed: failed)
-    }
-
-    private static func readEnv(root: URL) -> [String: String] {
-        let file = root.appendingPathComponent(".env")
-        guard let source = try? String(contentsOf: file, encoding: .utf8) else { return [:] }
-        var output: [String: String] = [:]
-        for line in source.components(separatedBy: .newlines) {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
-            let parts = trimmed.split(separator: "=", maxSplits: 1).map(String.init)
-            if parts.count == 2 { output[parts[0]] = parts[1] }
-        }
-        return output
     }
 }

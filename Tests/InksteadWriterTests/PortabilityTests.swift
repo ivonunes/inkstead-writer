@@ -3,7 +3,10 @@ import XCTest
 
 final class PortabilityTests: XCTestCase {
     private var root: URL {
-        URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
     }
 
     func testURLNetworkingSourcesImportFoundationNetworkingForLinux() throws {
@@ -37,13 +40,15 @@ final class PortabilityTests: XCTestCase {
         let workflows = testWorkflow + "\n" + releaseWorkflow
 
         XCTAssertTrue(testWorkflow.contains("container:"))
-        XCTAssertTrue(testWorkflow.contains("image: swift:latest"))
+        XCTAssertTrue(testWorkflow.contains("image: swift:6.3"))
+        XCTAssertFalse(workflows.contains("image: swift:latest"))
         XCTAssertTrue(testWorkflow.contains("swift test"))
         XCTAssertTrue(testWorkflow.contains("swift build -c release --static-swift-stdlib"))
         XCTAssertTrue(testWorkflow.contains("runs-on: macos-latest"))
         XCTAssertTrue(testWorkflow.contains("pull_request:"))
         XCTAssertFalse(testWorkflow.contains("push:"))
-        XCTAssertTrue(releaseWorkflow.contains("image: swift:latest"))
+        XCTAssertTrue(testWorkflow.contains("actions/cache"))
+        XCTAssertTrue(releaseWorkflow.contains("image: swift:6.3"))
         XCTAssertTrue(releaseWorkflow.contains("runner: macos-latest"))
         XCTAssertTrue(releaseWorkflow.contains("runner: macos-26-intel"))
         XCTAssertTrue(releaseWorkflow.contains("arch: x86_64"))

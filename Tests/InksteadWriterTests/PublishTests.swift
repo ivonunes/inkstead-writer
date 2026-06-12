@@ -2,9 +2,11 @@ import XCTest
 @testable import InksteadWriter
 
 final class PublishTests: XCTestCase {
+    private let config = InksteadWriterConfig(site: SiteConfig(title: "My Website", url: "https://example.com", author: "Your Name"))
+
     func testSkipsSyndicationCommitOutsideCi() throws {
         let root = try TemporaryDirectory()
-        let commands = try Publish.commitSyndicationChanges(root: root.url, env: [:]) { _, _ in
+        let commands = try Publish.commitSyndicationChanges(root: root.url, config: config, env: [:]) { _, _ in
             XCTFail("No git commands should run outside CI.")
             return 0
         }
@@ -16,7 +18,7 @@ final class PublishTests: XCTestCase {
         let root = try TemporaryDirectory()
         var captured: [DeployCommand] = []
 
-        let commands = try Publish.commitSyndicationChanges(root: root.url, env: ["GITHUB_ACTIONS": "true"]) { command, cwd in
+        let commands = try Publish.commitSyndicationChanges(root: root.url, config: config, env: ["GITHUB_ACTIONS": "true"]) { command, cwd in
             XCTAssertEqual(cwd, root.url)
             captured.append(command)
             return 0
@@ -32,11 +34,28 @@ final class PublishTests: XCTestCase {
         ])
     }
 
+    func testStagesConfiguredPostsPath() throws {
+        let root = try TemporaryDirectory()
+        let config = InksteadWriterConfig(
+            site: SiteConfig(title: "My Website", url: "https://example.com", author: "Your Name"),
+            content: ContentConfig(posts: "writing/posts")
+        )
+        var captured: [DeployCommand] = []
+
+        _ = try Publish.commitSyndicationChanges(root: root.url, config: config, env: ["GITHUB_ACTIONS": "true"]) { command, _ in
+            captured.append(command)
+            return 0
+        }
+
+        XCTAssertTrue(captured.map(commandLine).contains("git add writing/posts"))
+        XCTAssertFalse(captured.map(commandLine).contains("git add content/posts"))
+    }
+
     func testStopsBeforePushWhenCommitHasNoChanges() throws {
         let root = try TemporaryDirectory()
         var captured: [DeployCommand] = []
 
-        _ = try Publish.commitSyndicationChanges(root: root.url, env: ["GITHUB_ACTIONS": "true"]) { command, _ in
+        _ = try Publish.commitSyndicationChanges(root: root.url, config: config, env: ["GITHUB_ACTIONS": "true"]) { command, _ in
             captured.append(command)
             return command.arguments.first == "commit" ? 1 : 0
         }
@@ -47,6 +66,24 @@ final class PublishTests: XCTestCase {
             "git add content/posts",
             "git commit -m Update syndication data [skip ci]"
         ])
+    }
+
+    func testFailsWhenStagingOrConfigCommandsExitNonZero() throws {
+        let root = try TemporaryDirectory()
+
+        XCTAssertThrowsError(try Publish.commitSyndicationChanges(root: root.url, config: config, env: ["GITHUB_ACTIONS": "true"]) { command, _ in
+            command.arguments.first == "add" ? 128 : 0
+        }) { error in
+            XCTAssertEqual(error as? InksteadWriterError, .io("git add content/posts exited with status 128."))
+        }
+
+        XCTAssertThrowsError(try Publish.commitSyndicationChanges(root: root.url, config: config, env: ["GITHUB_ACTIONS": "true"]) { command, _ in
+            command.arguments.first == "config" ? 1 : 0
+        })
+
+        XCTAssertThrowsError(try Publish.commitSyndicationChanges(root: root.url, config: config, env: ["GITHUB_ACTIONS": "true"]) { command, _ in
+            command.arguments.first == "push" ? 1 : 0
+        })
     }
 
     func testUsesGitLabRemoteAndBranchWhenAvailable() throws {
@@ -60,7 +97,7 @@ final class PublishTests: XCTestCase {
             "CI_COMMIT_BRANCH": "main"
         ]
 
-        _ = try Publish.commitSyndicationChanges(root: root.url, env: env) { command, _ in
+        _ = try Publish.commitSyndicationChanges(root: root.url, config: config, env: env) { command, _ in
             captured.append(command)
             return 0
         }
@@ -77,7 +114,6 @@ final class PublishTests: XCTestCase {
 
     func testPublishBuildsDeploysSyndicatesRedeploysAndCommitsWhenSyndicationChanges() async throws {
         let root = try TemporaryDirectory()
-        let config = InksteadWriterConfig(site: SiteConfig(title: "My Website", url: "https://example.com", author: "Your Name"))
         var events: [String] = []
 
         let result = try await Publish.publishSite(
@@ -99,8 +135,9 @@ final class PublishTests: XCTestCase {
                 events.append("syndicate")
                 return SyndicationSummary(changed: true, published: 1, failed: 0)
             },
-            commit: { commitRoot in
+            commit: { commitRoot, commitConfig in
                 XCTAssertEqual(commitRoot, root.url)
+                XCTAssertEqual(commitConfig.site.title, "My Website")
                 events.append("commit")
             }
         )
@@ -111,7 +148,6 @@ final class PublishTests: XCTestCase {
 
     func testPublishDoesNotRedeployOrCommitWhenSyndicationDoesNotChangeFiles() async throws {
         let root = try TemporaryDirectory()
-        let config = InksteadWriterConfig(site: SiteConfig(title: "My Website", url: "https://example.com", author: "Your Name"))
         var events: [String] = []
 
         let result = try await Publish.publishSite(
@@ -123,13 +159,54 @@ final class PublishTests: XCTestCase {
                 events.append("syndicate")
                 return SyndicationSummary(changed: false, published: 0, failed: 0)
             },
-            commit: { _ in
+            commit: { _, _ in
                 XCTFail("Publish should not commit when syndication did not change frontmatter.")
             }
         )
 
         XCTAssertEqual(result, SyndicationSummary(changed: false, published: 0, failed: 0))
         XCTAssertEqual(events, ["build", "deploy", "syndicate"])
+    }
+
+    func testPublishCompletesAndLogsWhenSyndicationFails() async throws {
+        let root = try TemporaryDirectory()
+        var events: [String] = []
+        var logs: [String] = []
+
+        let result = try await Publish.publishSite(
+            root: root.url,
+            config: config,
+            build: { _, _ in events.append("build") },
+            deploy: { _, _ in events.append("deploy") },
+            syndicate: { _, _ in
+                events.append("syndicate")
+                return SyndicationSummary(changed: true, published: 1, failed: 2)
+            },
+            commit: { _, _ in events.append("commit") },
+            log: { logs.append($0) }
+        )
+
+        XCTAssertEqual(result, SyndicationSummary(changed: true, published: 1, failed: 2))
+        XCTAssertEqual(events, ["build", "deploy", "syndicate", "build", "deploy", "commit"])
+        XCTAssertTrue(logs.contains { $0.contains("Syndication failed for 2 targets") })
+    }
+
+    func testPublishPropagatesSyndicationErrors() async throws {
+        let root = try TemporaryDirectory()
+
+        do {
+            _ = try await Publish.publishSite(
+                root: root.url,
+                config: config,
+                build: { _, _ in },
+                deploy: { _, _ in },
+                syndicate: { _, _ in throw InksteadWriterError.config("broken post") },
+                commit: { _, _ in XCTFail("Publish should not commit when syndication throws.") }
+            )
+            XCTFail("Publish should propagate syndication errors.")
+        } catch {
+            XCTAssertEqual(error as? InksteadWriterError, .config("broken post"))
+        }
     }
 
     private func commandLine(_ command: DeployCommand) -> String {

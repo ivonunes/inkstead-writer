@@ -13,6 +13,44 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  linux-tests:
+    name: Linux tests
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Cache SwiftPM build
+        uses: actions/cache@v5
+        with:
+          path: .build
+          key: linux-test-swiftpm-${{ hashFiles('Package.resolved', 'Package.swift') }}
+          restore-keys: |
+            linux-test-swiftpm-
+
+      - name: Test
+        run: swift test
+
+  macos-tests:
+    name: macOS tests
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Cache SwiftPM build
+        uses: actions/cache@v5
+        with:
+          path: .build
+          key: macos-test-swiftpm-${{ hashFiles('Package.resolved', 'Package.swift') }}
+          restore-keys: |
+            macos-test-swiftpm-
+
+      - name: Test
+        run: swift test
+
   launcher:
     name: Launcher script
     runs-on: ubuntu-latest
@@ -46,9 +84,12 @@ jobs:
 
   linux:
     name: Linux binary (${{ matrix.arch }})
+    needs:
+      - linux-tests
+      - macos-tests
     runs-on: ${{ matrix.runner }}
     container:
-      image: swift:latest
+      image: swift:6.3
     strategy:
       fail-fast: false
       matrix:
@@ -68,9 +109,6 @@ jobs:
             echo "Tag $GITHUB_REF_NAME does not match Inkstead Writer version $VERSION"
             exit 1
           fi
-
-      - name: Test
-        run: swift test
 
       - name: Build
         run: swift build -c release --static-swift-stdlib
@@ -98,6 +136,9 @@ jobs:
 
   macos:
     name: macOS binary (${{ matrix.arch }})
+    needs:
+      - linux-tests
+      - macos-tests
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -118,9 +159,6 @@ jobs:
             echo "Tag $GITHUB_REF_NAME does not match Inkstead Writer version $VERSION"
             exit 1
           fi
-
-      - name: Test
-        run: swift test
 
       - name: Build
         run: swift build -c release

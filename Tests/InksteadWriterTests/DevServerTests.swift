@@ -79,6 +79,90 @@ final class DevServerTests: XCTestCase {
         XCTAssertEqual(response.location, "/2026/05/10/hello/")
     }
 
+    func testInjectsLiveReloadSnippetIntoHTMLResponses() async throws {
+        #if os(Windows)
+        throw XCTSkip("The local dev server is not implemented on Windows yet.")
+        #endif
+        let root = try TemporaryDirectory()
+        try FileManager.default.createDirectory(at: root.url.appendingPathComponent("content/posts"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.url.appendingPathComponent("content/pages"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.url.appendingPathComponent("content/media"), withIntermediateDirectories: true)
+        try """
+        ---
+        title: Hello
+        date: 2026-05-10T18:30:00+01:00
+        ---
+
+        Body.
+        """.write(to: root.url.appendingPathComponent("content/posts/2026-05-10-hello.md"), atomically: true, encoding: .utf8)
+        let config = InksteadWriterConfig(
+            site: SiteConfig(title: "My Website", url: "https://example.com", author: "Your Name"),
+            connection: AppConnectionConfig(provider: .github, repository: "me/site", branch: "main")
+        )
+        let server = DevServer(root: root.url, config: config, port: 0, rebuildOnRequest: false)
+        try server.start()
+        defer { server.stop() }
+
+        let home = try await fetch("http://127.0.0.1:\(server.port)/")
+        XCTAssertEqual(home.status, 200)
+        XCTAssertEqual(home.contentType, "text/html; charset=utf-8")
+        let html = try XCTUnwrap(String(data: home.body, encoding: .utf8))
+        XCTAssertTrue(html.contains("/__inkstead-writer/changes"))
+        XCTAssertTrue(html.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("</html>"))
+        if let bodyClose = html.range(of: "</body>"), let snippet = html.range(of: "/__inkstead-writer/changes") {
+            XCTAssertTrue(snippet.lowerBound < bodyClose.lowerBound)
+        }
+
+        let distHome = root.url.appendingPathComponent("dist/index.html")
+        let distHTML = try String(contentsOf: distHome, encoding: .utf8)
+        XCTAssertFalse(distHTML.contains("/__inkstead-writer/changes"), "Live reload must never be written into dist.")
+
+        let raw = try sendRawGET(URLRequest(url: URL(string: "http://127.0.0.1:\(server.port)/")!))
+        let separator = "\r\n\r\n"
+        let headerEnd = try XCTUnwrap(raw.range(of: separator))
+        let headers = String(raw[..<headerEnd.lowerBound])
+        let rawBody = String(raw[headerEnd.upperBound...])
+        let contentLength = headers.components(separatedBy: "\r\n").first { $0.lowercased().hasPrefix("content-length:") }
+            .flatMap { Int($0.split(separator: ":", maxSplits: 1).last?.trimmingCharacters(in: .whitespaces) ?? "") }
+        XCTAssertEqual(contentLength, rawBody.utf8.count)
+        XCTAssertTrue(rawBody.contains("/__inkstead-writer/changes"))
+    }
+
+    func testNonHTMLResponsesAreServedUnmodified() async throws {
+        #if os(Windows)
+        throw XCTSkip("The local dev server is not implemented on Windows yet.")
+        #endif
+        let root = try TemporaryDirectory()
+        try FileManager.default.createDirectory(at: root.url.appendingPathComponent("content/posts"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.url.appendingPathComponent("content/pages"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.url.appendingPathComponent("content/media"), withIntermediateDirectories: true)
+        try """
+        ---
+        title: Hello
+        date: 2026-05-10T18:30:00+01:00
+        ---
+
+        Body.
+        """.write(to: root.url.appendingPathComponent("content/posts/2026-05-10-hello.md"), atomically: true, encoding: .utf8)
+        let config = InksteadWriterConfig(
+            site: SiteConfig(title: "My Website", url: "https://example.com", author: "Your Name"),
+            connection: AppConnectionConfig(provider: .github, repository: "me/site", branch: "main")
+        )
+        let server = DevServer(root: root.url, config: config, port: 0, rebuildOnRequest: false)
+        try server.start()
+        defer { server.stop() }
+
+        try Data("body { color: red }".utf8).write(to: root.url.appendingPathComponent("dist/styles.css"))
+
+        let response = try await fetch("http://127.0.0.1:\(server.port)/styles.css")
+        XCTAssertEqual(response.status, 200)
+        XCTAssertEqual(String(data: response.body, encoding: .utf8), "body { color: red }")
+
+        let publicConfig = try await fetch("http://127.0.0.1:\(server.port)/inkstead-writer.json")
+        XCTAssertEqual(publicConfig.status, 200)
+        XCTAssertFalse(String(data: publicConfig.body, encoding: .utf8)?.contains("__inkstead-writer") == true)
+    }
+
     private func fetch(_ url: String) async throws -> (status: Int, contentType: String?, body: Data) {
         try await send(URLRequest(url: URL(string: url)!))
     }

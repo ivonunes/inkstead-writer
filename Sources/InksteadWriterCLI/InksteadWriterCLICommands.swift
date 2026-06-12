@@ -14,7 +14,7 @@ extension InksteadWriterCLI {
     static func runMigration(root: URL, arguments: [String]) throws {
         let checkOnly = arguments.contains("--check")
         let dryRun = arguments.contains("--dry-run")
-        let targetVersion = value(after: "--to", in: arguments) ?? InksteadWriterMetadata.currentVersion
+        let targetVersion = try value(after: "--to", in: arguments) ?? InksteadWriterMetadata.currentVersion
         let result = try MigrationRunner.run(
             root: root, targetVersion: targetVersion, checkOnly: checkOnly, dryRun: dryRun)
         if result.plan.actions.isEmpty {
@@ -44,7 +44,7 @@ extension InksteadWriterCLI {
 
     static func runCache(root: URL, arguments: [String]) throws {
         let subcommand = arguments.dropFirst().first ?? "list"
-        let config = try? ConfigLoader.load(root: root)
+        let config = try ConfigLoader.loadIfPresent(root: root)
         let currentVersion = config?.recordedVersion ?? InksteadWriterMetadata.currentVersion
         let currentPlatform = try? InksteadWriterReleaseResolver.currentPlatform()
         let cacheRoot = InksteadWriterReleaseResolver.cacheRoot()
@@ -70,7 +70,7 @@ extension InksteadWriterCLI {
             let result = try CacheManager.clean(
                 cacheRoot: cacheRoot,
                 keepVersion: currentVersion,
-                version: value(after: "--version", in: arguments),
+                version: try value(after: "--version", in: arguments),
                 all: arguments.contains("--all"),
                 dryRun: arguments.contains("--dry-run")
             )
@@ -121,7 +121,7 @@ extension InksteadWriterCLI {
         case "language-server":
             PlumeLanguageServer().run()
         case "eject":
-            let config = try? ConfigLoader.load(root: root)
+            let config = try ConfigLoader.loadIfPresent(root: root)
             let result = try ThemeEjector.eject(
                 root: root, themePath: config?.theme?.path ?? "theme",
                 force: arguments.contains("--force") || arguments.contains("-f"))
@@ -206,9 +206,7 @@ extension InksteadWriterCLI {
     }
 
     static func relativePath(_ url: URL, root: URL) -> String {
-        url.standardizedFileURL.path
-            .replacingOccurrences(of: root.standardizedFileURL.path, with: "")
-            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        FileTreeSupport.relativePath(of: url, under: root) ?? url.standardizedFileURL.path
     }
 
     static func formatBytes(_ bytes: Int64) -> String {

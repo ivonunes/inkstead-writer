@@ -54,13 +54,18 @@ public enum FrontmatterParser {
         }
         let newline = raw.hasPrefix("---\r\n") ? "\r\n" : "\n"
         let marker = "\(newline)---\(newline)"
-        guard let close = raw.range(of: marker, range: raw.index(raw.startIndex, offsetBy: 3)..<raw.endIndex) else {
-            return ([:], raw)
-        }
         let frontmatterStart = raw.index(raw.startIndex, offsetBy: 3 + newline.count)
-        let yaml = String(raw[frontmatterStart..<close.lowerBound])
-        let body = String(raw[close.upperBound...])
-        return (parseYamlSubset(yaml), body)
+        if let close = raw.range(of: marker, range: raw.index(raw.startIndex, offsetBy: 3)..<raw.endIndex) {
+            let yaml = String(raw[frontmatterStart..<close.lowerBound])
+            let body = String(raw[close.upperBound...])
+            return (parseYamlSubset(yaml), body)
+        }
+        let closeAtEnd = "\(newline)---"
+        if raw.hasSuffix(closeAtEnd), raw.distance(from: frontmatterStart, to: raw.endIndex) >= closeAtEnd.count {
+            let yaml = String(raw[frontmatterStart..<raw.index(raw.endIndex, offsetBy: -closeAtEnd.count)])
+            return (parseYamlSubset(yaml), "")
+        }
+        return ([:], raw)
     }
 
     public static func parseYamlSubset(_ yaml: String) -> [String: FrontmatterValue] {

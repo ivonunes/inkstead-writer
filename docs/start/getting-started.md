@@ -1,6 +1,6 @@
 # Getting Started
 
-Inkstead Writer turns Markdown files into a personal website. The quickest path is to install the launcher, create a site, and run the local preview.
+Inkstead Writer turns Markdown files into a personal website. It runs on macOS and Linux. The quickest path is to install the launcher, create a site, and run the local preview.
 
 Install the launcher:
 
@@ -59,6 +59,22 @@ This is my first Inkstead Writer post.
 
 Run `./inkstead-writer dev` and the post appears on the homepage. Posts use dated permalinks by default, such as `/2026/05/10/hello-from-my-website/`.
 
+You can also create posts from the command line. `./inkstead-writer new post` asks a couple of questions and writes the file with the right name and frontmatter.
+
+## Local Preview
+
+```bash
+./inkstead-writer dev
+```
+
+`dev` builds the site, serves it locally, and watches for changes. When you save a post or template, the site rebuilds and open pages reload in the browser automatically.
+
+To use a different port:
+
+```bash
+./inkstead-writer dev --port 8080
+```
+
 ## Build The Site
 
 When you are ready to generate the static site:
@@ -79,6 +95,6 @@ If you chose a publishing target during `init`, publish with:
 
 `publish` builds the site, deploys it, syndicates any posts that ask to be syndicated, then updates the site again if new syndication links were added.
 
-Before publishing, fill in `.env` for local publishing. If you chose automated publishing, add the same values as CI secrets or variables.
+Before publishing from your own machine, copy the generated `.env.example` to `.env` and fill in the values. If you chose automated publishing, add the same names as CI secrets or variables instead.
 
 Run `./inkstead-writer doctor` before publishing to check your config, content, publishing setup, and required environment variables.

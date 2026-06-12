@@ -27,6 +27,8 @@ The `site` section controls the public identity of the website:
 
 Optional fields include `lang`, `timezone`, `email`, `avatar`, `bio`, `navigation`, and `social`. Themes can use these values when rendering headers, feeds, author details, and social links.
 
+`timezone` takes an IANA identifier such as `Europe/Lisbon`. Post timestamps written with an explicit offset, such as `2026-05-10T18:30:00+01:00`, are honoured as written; timestamps without an offset and date-only values are interpreted as UTC. The timezone then determines which calendar day each post falls on for dated post URLs and displayed dates. When unset, UTC is used. Because dated URLs depend on it, changing `timezone` later can move the permalink of any post published near midnight.
+
 ## Content Folders
 
 Inkstead Writer uses these folders by default:

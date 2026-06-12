@@ -12,7 +12,7 @@ Choose GitHub Pages during `inkstead-writer init`, or add this to `inkstead-writ
 }
 ```
 
-GitHub Pages uses GitHub Actions, so Inkstead Writer also generates `.github/workflows/publish.yml` when this target is selected during `init`.
+GitHub Pages uses GitHub Actions, so Inkstead Writer also generates `.github/workflows/publish.yml` when this target is selected during `init`. The workflow itself is described in [GitHub Actions](/ci/github-actions/).
 
 ## Repository Settings
 

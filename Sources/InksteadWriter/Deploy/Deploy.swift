@@ -23,7 +23,7 @@ public enum Deploy {
         guard let deploy = config.deploy else {
             throw InksteadWriterError.config("No deployment provider is configured.")
         }
-        let mergedEnv = readEnv(root: root).merging(env) { _, new in new }
+        let mergedEnv = EnvFile.read(root: root).merging(env) { _, new in new }
         let distDir = root.appendingPathComponent(config.build?.output ?? "dist")
         switch deploy.provider {
         case .cloudflareWorkers:
@@ -74,7 +74,7 @@ public enum Deploy {
         let prepareStarted = Date()
         let assets = try cloudflareAssets(in: distDir)
         let totalBytes = assets.reduce(0) { $0 + $1.size }
-        log("Cloudflare assets: prepared \(assets.count) files (\(formatBytes(totalBytes))) in \(formatDuration(since: prepareStarted)).")
+        log("Cloudflare assets: prepared \(assets.count) files (\(formatBytes(totalBytes))) in \(BuildFormatting.formatDuration(since: prepareStarted)).")
         let manifest = Dictionary(uniqueKeysWithValues: assets.map { asset in
             ("/\(asset.path)", ["hash": asset.hash, "size": asset.size] as [String: Any])
         })
@@ -91,7 +91,7 @@ public enum Deploy {
             action: "Cloudflare asset upload session",
             http: http
         )
-        log("Cloudflare assets: upload session created in \(formatDuration(since: sessionStarted)).")
+        log("Cloudflare assets: upload session created in \(BuildFormatting.formatDuration(since: sessionStarted)).")
         let result = uploadSession["result"] as? [String: Any]
         guard let uploadJWT = result?["jwt"] as? String else {
             throw InksteadWriterError.io("Cloudflare asset upload session did not return an upload token.")
@@ -107,7 +107,7 @@ public enum Deploy {
         )
         let workerStarted = Date()
         try await uploadCloudflareWorker(accountID: accountID, apiToken: apiToken, scriptName: scriptName, completionJWT: completionJWT, http: http)
-        log("Cloudflare Worker uploaded in \(formatDuration(since: workerStarted)).")
+        log("Cloudflare Worker uploaded in \(BuildFormatting.formatDuration(since: workerStarted)).")
     }
 
     private static func uploadCloudflareAssets(
@@ -165,7 +165,7 @@ public enum Deploy {
         guard let completionJWT else {
             throw InksteadWriterError.io("Cloudflare asset upload did not return a completion token.")
         }
-        log("Cloudflare assets: upload completed in \(formatDuration(since: started)).")
+        log("Cloudflare assets: upload completed in \(BuildFormatting.formatDuration(since: started)).")
         return completionJWT
     }
 
@@ -178,32 +178,34 @@ public enum Deploy {
         accountID: String,
         http: @escaping HTTPClient
     ) async throws -> CloudflareBucketUploadResult {
+        var form = HTTPMultipartForm()
+        for hash in bucket {
+            guard let asset = assetsByHash[hash] else {
+                throw InksteadWriterError.io("Cloudflare requested unknown asset hash \(hash).")
+            }
+            let bytes = try Data(contentsOf: asset.url)
+            form.addField(name: hash, value: bytes.base64EncodedString(), contentType: asset.contentType)
+        }
+        let request = try URLRequest.cloudflare(
+            url: "https://api.cloudflare.com/client/v4/accounts/\(pathSegment(accountID))/workers/assets/upload?base64=true",
+            method: "POST",
+            bearerToken: uploadJWT,
+            contentType: "multipart/form-data; boundary=\(form.boundary)",
+            body: form.body()
+        )
+        let action = "Cloudflare asset upload bucket \(bucketIndex + 1)/\(bucketCount)"
         var attempt = 1
         while true {
+            var retryableStatus = false
             do {
-                var form = HTTPMultipartForm()
-                for hash in bucket {
-                    guard let asset = assetsByHash[hash] else {
-                        throw InksteadWriterError.io("Cloudflare requested unknown asset hash \(hash).")
-                    }
-                    let bytes = try Data(contentsOf: asset.url)
-                    form.addField(name: hash, value: bytes.base64EncodedString(), contentType: asset.contentType)
-                }
-                let response = try await sendJSON(
-                    URLRequest.cloudflare(
-                        url: "https://api.cloudflare.com/client/v4/accounts/\(pathSegment(accountID))/workers/assets/upload?base64=true",
-                        method: "POST",
-                        bearerToken: uploadJWT,
-                        contentType: "multipart/form-data; boundary=\(form.boundary)",
-                        body: form.body()
-                    ),
-                    action: "Cloudflare asset upload bucket \(bucketIndex + 1)/\(bucketCount)",
-                    http: http
-                )
-                let completionJWT = (response["result"] as? [String: Any])?["jwt"] as? String
+                let response = try await http(request)
+                retryableStatus = response.statusCode == 429 || (500..<600).contains(response.statusCode)
+                let json = try decodeJSON(response, action: action)
+                let completionJWT = (json["result"] as? [String: Any])?["jwt"] as? String
                 return CloudflareBucketUploadResult(fileCount: bucket.count, completionJWT: completionJWT)
             } catch {
-                guard attempt < 5 else { throw error }
+                let transportFailure = !(error is InksteadWriterError) && !(error is CancellationError)
+                guard attempt < 5, retryableStatus || transportFailure else { throw error }
                 let delaySeconds = UInt64(1 << (attempt - 1))
                 try await Task.sleep(nanoseconds: delaySeconds * 1_000_000_000)
                 attempt += 1
@@ -275,7 +277,10 @@ public enum Deploy {
     }
 
     private static func sendJSON(_ request: URLRequest, action: String, http: @escaping HTTPClient) async throws -> [String: Any] {
-        let response = try await http(request)
+        try decodeJSON(try await http(request), action: action)
+    }
+
+    private static func decodeJSON(_ response: HTTPResponse, action: String) throws -> [String: Any] {
         let json = (try? JSONSerialization.jsonObject(with: response.body)) as? [String: Any]
         guard (200..<300).contains(response.statusCode) else {
             let message = cloudflareErrorMessage(json: json) ?? "HTTP \(response.statusCode)"
@@ -352,19 +357,6 @@ public enum Deploy {
         }
     }
 
-    private static func readEnv(root: URL) -> [String: String] {
-        let file = root.appendingPathComponent(".env")
-        guard let source = try? String(contentsOf: file, encoding: .utf8) else { return [:] }
-        var output: [String: String] = [:]
-        for line in source.components(separatedBy: .newlines) {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
-            let parts = trimmed.split(separator: "=", maxSplits: 1).map(String.init)
-            if parts.count == 2 { output[parts[0]] = parts[1] }
-        }
-        return output
-    }
-
     private static func pathSegment(_ value: String) -> String {
         value.addingPercentEncoding(withAllowedCharacters: urlPathSegmentAllowed) ?? value
     }
@@ -377,14 +369,6 @@ public enum Deploy {
 
     private static var cloudflareWorkerScript: String {
         "export default { async fetch(request, env) { return env.ASSETS.fetch(request); } };\n"
-    }
-
-    private static func formatDuration(since start: Date) -> String {
-        let seconds = Date().timeIntervalSince(start)
-        if seconds < 10 {
-            return String(format: "%.2fs", seconds)
-        }
-        return String(format: "%.1fs", seconds)
     }
 
     private static func formatBytes(_ bytes: Int) -> String {

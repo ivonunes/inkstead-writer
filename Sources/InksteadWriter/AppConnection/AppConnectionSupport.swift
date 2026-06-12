@@ -82,7 +82,7 @@ public enum AppConnectionSupport {
         return AppConnectionConfig()
     }
 
-    private static func inferredConnectionProvider(ci: CiProviderName?) -> AppConnectionProviderName? {
+    public static func inferredConnectionProvider(ci: CiProviderName?) -> AppConnectionProviderName? {
         switch ci {
         case .githubActions: .github
         case .gitlabCi: .gitlab

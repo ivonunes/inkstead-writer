@@ -51,6 +51,31 @@ final class RequirementsDoctorTests: XCTestCase {
         })
     }
 
+    func testDoctorParsesDotEnvQuotesSpacesAndExportPrefix() throws {
+        let root = try TemporaryDirectory()
+        try FileManager.default.createDirectory(at: root.url.appendingPathComponent("content/posts"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.url.appendingPathComponent("content/pages"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.url.appendingPathComponent("content/media"), withIntermediateDirectories: true)
+        try """
+        {
+          "inkstead": { "version": "2.0.0" },
+          "site": { "title": "My Website", "url": "https://example.com", "author": "Your Name" },
+          "deploy": { "provider": "netlify" }
+        }
+        """.write(to: root.url.appendingPathComponent("inkstead.json"), atomically: true, encoding: .utf8)
+        try """
+        # Netlify credentials
+        export NETLIFY_SITE_ID = "site-id"
+        NETLIFY_AUTH_TOKEN='token'
+        """.write(to: root.url.appendingPathComponent(".env"), atomically: true, encoding: .utf8)
+
+        let result = Doctor.run(root: root.url, config: try ConfigLoader.load(root: root.url), env: [:])
+
+        XCTAssertTrue(result.output.contains(".env loaded"))
+        XCTAssertTrue(result.output.contains("NETLIFY_SITE_ID is set"))
+        XCTAssertTrue(result.output.contains("NETLIFY_AUTH_TOKEN is set"))
+    }
+
     func testDoctorReportsLauncherDrift() throws {
         let root = try TemporaryDirectory()
         try FileManager.default.createDirectory(at: root.url.appendingPathComponent("content/posts"), withIntermediateDirectories: true)

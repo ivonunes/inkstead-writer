@@ -78,6 +78,70 @@ final class ImageOptimizationTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: outputImage), sentinel)
     }
 
+    func testUndecodableSupportedImageEmitsWarningInsteadOfSilentCopy() throws {
+        let root = try TemporaryDirectory()
+        let cache = root.url.appendingPathComponent("cache")
+        let sourceMedia = root.url.appendingPathComponent("content/media")
+        let outputMedia = root.url.appendingPathComponent("dist/media")
+        try FileManager.default.createDirectory(at: sourceMedia, withIntermediateDirectories: true)
+        let bytes = Data("not actually a jpeg".utf8)
+        let sourceImage = sourceMedia.appendingPathComponent("broken.jpg")
+        try bytes.write(to: sourceImage)
+        let config = InksteadWriterConfig(
+            site: SiteConfig(title: "Test", url: "https://example.com", author: "Test"),
+            media: MediaConfig(optimize: true, maxWidth: 100, maxHeight: 100, quality: 82)
+        )
+
+        var warnings: [String] = []
+        try ImageOptimizer.copyOptimizedMedia(from: sourceMedia, to: outputMedia, config: config, cacheRoot: cache) { warnings.append($0) }
+
+        XCTAssertEqual(try Data(contentsOf: outputMedia.appendingPathComponent("broken.jpg")), bytes)
+        XCTAssertEqual(warnings.count, 1)
+        XCTAssertTrue(warnings[0].contains("could not optimize"))
+        XCTAssertTrue(warnings[0].contains(sourceImage.path))
+    }
+
+    func testSuccessfulOptimizationEmitsNoWarning() throws {
+        let root = try TemporaryDirectory()
+        let cache = root.url.appendingPathComponent("cache")
+        let sourceMedia = root.url.appendingPathComponent("content/media")
+        let outputMedia = root.url.appendingPathComponent("dist/media")
+        try FileManager.default.createDirectory(at: sourceMedia, withIntermediateDirectories: true)
+        try testJPEGData(width: 320, height: 180).write(to: sourceMedia.appendingPathComponent("photo.jpg"))
+        let config = InksteadWriterConfig(
+            site: SiteConfig(title: "Test", url: "https://example.com", author: "Test"),
+            media: MediaConfig(optimize: true, maxWidth: 100, maxHeight: 100, quality: 82)
+        )
+
+        var warnings: [String] = []
+        try ImageOptimizer.copyOptimizedMedia(from: sourceMedia, to: outputMedia, config: config, cacheRoot: cache) { warnings.append($0) }
+
+        XCTAssertEqual(warnings, [])
+    }
+
+    func testContentHashCacheMemoizesUntilFileChanges() throws {
+        let root = try TemporaryDirectory()
+        let file = root.url.appendingPathComponent("photo.jpg")
+        let original = Data("original contents".utf8)
+        try original.write(to: file)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1_000_000)], ofItemAtPath: file.path)
+
+        let before = FileContentHashCache.shared.computedHashCount
+        let first = try FileContentHashCache.shared.hash(of: file)
+        let second = try FileContentHashCache.shared.hash(of: file)
+        XCTAssertEqual(first, SHA256.hex(original))
+        XCTAssertEqual(second, first)
+        XCTAssertEqual(FileContentHashCache.shared.computedHashCount - before, 1)
+
+        let updated = Data("updated contents!".utf8)
+        try updated.write(to: file)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 2_000_000)], ofItemAtPath: file.path)
+        let third = try FileContentHashCache.shared.hash(of: file)
+        XCTAssertEqual(third, SHA256.hex(updated))
+        XCTAssertNotEqual(third, first)
+        XCTAssertEqual(FileContentHashCache.shared.computedHashCount - before, 2)
+    }
+
     func testOptimizationKeepsOriginalWhenEncodedImageWouldBeLarger() throws {
         let root = try TemporaryDirectory()
         let image = root.url.appendingPathComponent("tiny.jpg")

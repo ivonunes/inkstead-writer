@@ -5,6 +5,7 @@ struct ThemeRenderer: @unchecked Sendable {
     let root: URL
     let dist: URL
     let config: InksteadWriterConfig
+    let timeZone: TimeZone
     let posts: [NormalizedPost]
     let pages: [NormalizedPage]
     let categories: [CategoryCollection]
@@ -60,18 +61,25 @@ struct ThemeRenderer: @unchecked Sendable {
         self.components = components
         self.plumeEnvironment = plumeEnvironment
         self.plumeTemplateCache = PlumeTemplateCache(environment: plumeEnvironment)
+        let timeZone = try ContentLoader.siteTimeZone(config)
+        self.timeZone = timeZone
         self.serializedSite = serializeSite(config.site)
         self.serializedConfig = serializeConfig(config)
-        let serializedPosts = posts.map(serializePost)
+        let serializedPosts = posts.map { serializePost($0, timeZone: timeZone) }
         let serializedPages = pages.map(serializePage)
-        let serializedCategories = categories.map(serializeCategory)
-        let serializedPhotoPosts = photoPosts.map(serializePost)
+        let serializedPostsByURL = ThemeRenderer.index(
+            serializedPosts, by: posts.map(\.canonicalUrl))
+        let serializedCategories = categories.map {
+            serializeCategory($0, postsByURL: serializedPostsByURL, timeZone: timeZone)
+        }
+        let serializedPhotoPosts = photoPosts.map {
+            serializedPostsByURL[$0.canonicalUrl] ?? serializePost($0, timeZone: timeZone)
+        }
         self.serializedPosts = serializedPosts
         self.serializedPages = serializedPages
         self.serializedCategories = serializedCategories
         self.serializedPhotoPosts = serializedPhotoPosts
-        self.serializedPostsByURL = ThemeRenderer.index(
-            serializedPosts, by: posts.map(\.canonicalUrl))
+        self.serializedPostsByURL = serializedPostsByURL
         self.serializedPagesBySlug = ThemeRenderer.index(serializedPages, by: pages.map(\.slug))
         self.serializedCategoriesBySlug = ThemeRenderer.index(
             serializedCategories, by: categories.map(\.slug))
@@ -82,7 +90,7 @@ struct ThemeRenderer: @unchecked Sendable {
             "photoPosts": self.serializedPhotoPosts,
         ]
         for (name, items) in customCollections {
-            serializedCollections[name] = items.map(serializeCustomCollectionItem)
+            serializedCollections[name] = items.map { serializeCustomCollectionItem($0, timeZone: timeZone) }
         }
         self.serializedCollections = serializedCollections
         self.currentYear = Calendar.current.component(.year, from: Date())
@@ -229,7 +237,7 @@ struct ThemeRenderer: @unchecked Sendable {
     }
 
     func serializedPost(_ post: NormalizedPost) -> [String: Any] {
-        serializedPostsByURL[post.canonicalUrl] ?? serializePost(post)
+        serializedPostsByURL[post.canonicalUrl] ?? serializePost(post, timeZone: timeZone)
     }
 
     func serializedPage(_ page: NormalizedPage) -> [String: Any] {
@@ -237,7 +245,7 @@ struct ThemeRenderer: @unchecked Sendable {
     }
 
     func serializedCategory(_ category: CategoryCollection) -> [String: Any] {
-        serializedCategoriesBySlug[category.slug] ?? serializeCategory(category)
+        serializedCategoriesBySlug[category.slug] ?? serializeCategory(category, timeZone: timeZone)
     }
 
     static func index(_ values: [[String: Any]], by keys: [String]) -> [String: [String: Any]] {

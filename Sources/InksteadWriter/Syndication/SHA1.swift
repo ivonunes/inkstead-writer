@@ -1,10 +1,6 @@
 import Foundation
 
 enum SHA1 {
-    static func hex(_ data: Data) -> String {
-        digestBytes(data).map { String(format: "%02x", $0) }.joined()
-    }
-
     static func digestBytes(_ data: Data) -> [UInt8] {
         var message = [UInt8](data)
         let bitLength = UInt64(message.count) * 8

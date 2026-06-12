@@ -12,7 +12,8 @@ let package = Package(
         .executable(name: "inkstead-writer", targets: ["InksteadWriterCLI"])
     ],
     dependencies: [
-        .package(url: "https://github.com/ivonunes/plume.git", from: "1.0.0"),
+        .package(url: "https://github.com/ivonunes/plume.git", from: "1.1.0"),
+        .package(url: "https://github.com/apple/swift-cmark.git", from: "0.8.0"),
         .package(path: "ThirdParty/libjpeg-turbo"),
         .package(path: "ThirdParty/libspng"),
         .package(path: "ThirdParty/libwebp")
@@ -22,6 +23,8 @@ let package = Package(
             name: "InksteadWriter",
             dependencies: [
                 .product(name: "Plume", package: "plume"),
+                .product(name: "cmark-gfm", package: "swift-cmark"),
+                .product(name: "cmark-gfm-extensions", package: "swift-cmark"),
                 .product(name: "JPEGTurbo", package: "libjpeg-turbo"),
                 .product(name: "PNGCodec", package: "libspng"),
                 .product(name: "WebP", package: "libwebp")

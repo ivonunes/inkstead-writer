@@ -187,6 +187,160 @@ final class DeployTests: XCTestCase {
         XCTAssertEqual(assetUploadAttempts, 2)
     }
 
+    func testCloudflareAssetUploadRetriesTransportFailure() async throws {
+        struct TransportError: Error {}
+        let root = try TemporaryDirectory()
+        try FileManager.default.createDirectory(at: root.url.appendingPathComponent("dist"), withIntermediateDirectories: true)
+        try "<h1>Hello</h1>".write(to: root.url.appendingPathComponent("dist/index.html"), atomically: true, encoding: .utf8)
+        let config = InksteadWriterConfig(
+            site: SiteConfig(title: "My Website", url: "https://example.com", author: "Your Name"),
+            deploy: DeployConfig(provider: .cloudflareWorkers, projectName: "my-worker")
+        )
+        var assetUploadAttempts = 0
+
+        try await Deploy.deploySite(
+            root: root.url,
+            config: config,
+            env: ["CLOUDFLARE_ACCOUNT_ID": "account-id", "CLOUDFLARE_API_TOKEN": "api-token"],
+            http: { request in
+                switch request.url?.path {
+                case "/client/v4/accounts/account-id/workers/scripts/my-worker/assets-upload-session":
+                    let body = try XCTUnwrap(request.httpBody)
+                    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+                    let manifest = try XCTUnwrap(json["manifest"] as? [String: [String: Any]])
+                    let hash = try XCTUnwrap(manifest["/index.html"]?["hash"] as? String)
+                    return HTTPResponse(statusCode: 200, body: Data(#"{"success":true,"result":{"jwt":"upload-token","buckets":[["\#(hash)"]]}}"#.utf8))
+                case "/client/v4/accounts/account-id/workers/assets/upload":
+                    assetUploadAttempts += 1
+                    if assetUploadAttempts == 1 {
+                        throw TransportError()
+                    }
+                    return HTTPResponse(statusCode: 201, body: Data(#"{"success":true,"result":{"jwt":"completion-token"}}"#.utf8))
+                case "/client/v4/accounts/account-id/workers/scripts/my-worker":
+                    return HTTPResponse(statusCode: 200, body: Data(#"{"success":true,"result":{"id":"my-worker"}}"#.utf8))
+                default:
+                    XCTFail("Unexpected Cloudflare request: \(request.url?.absoluteString ?? "nil")")
+                    return HTTPResponse(statusCode: 404)
+                }
+            },
+            run: { _, _ in XCTFail("Cloudflare deploy should use the API, not an external CLI.") },
+            log: { _ in }
+        )
+
+        XCTAssertEqual(assetUploadAttempts, 2)
+    }
+
+    func testCloudflareAssetUploadDoesNotRetryClientError() async throws {
+        let root = try TemporaryDirectory()
+        try FileManager.default.createDirectory(at: root.url.appendingPathComponent("dist"), withIntermediateDirectories: true)
+        try "<h1>Hello</h1>".write(to: root.url.appendingPathComponent("dist/index.html"), atomically: true, encoding: .utf8)
+        let config = InksteadWriterConfig(
+            site: SiteConfig(title: "My Website", url: "https://example.com", author: "Your Name"),
+            deploy: DeployConfig(provider: .cloudflareWorkers, projectName: "my-worker")
+        )
+        var assetUploadAttempts = 0
+
+        do {
+            try await Deploy.deploySite(
+                root: root.url,
+                config: config,
+                env: ["CLOUDFLARE_ACCOUNT_ID": "account-id", "CLOUDFLARE_API_TOKEN": "api-token"],
+                http: { request in
+                    switch request.url?.path {
+                    case "/client/v4/accounts/account-id/workers/scripts/my-worker/assets-upload-session":
+                        let body = try XCTUnwrap(request.httpBody)
+                        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+                        let manifest = try XCTUnwrap(json["manifest"] as? [String: [String: Any]])
+                        let hash = try XCTUnwrap(manifest["/index.html"]?["hash"] as? String)
+                        return HTTPResponse(statusCode: 200, body: Data(#"{"success":true,"result":{"jwt":"upload-token","buckets":[["\#(hash)"]]}}"#.utf8))
+                    case "/client/v4/accounts/account-id/workers/assets/upload":
+                        assetUploadAttempts += 1
+                        return HTTPResponse(statusCode: 401, body: Data(#"{"success":false,"errors":[{"message":"invalid token"}]}"#.utf8))
+                    default:
+                        XCTFail("Unexpected Cloudflare request: \(request.url?.absoluteString ?? "nil")")
+                        return HTTPResponse(statusCode: 404)
+                    }
+                },
+                run: { _, _ in XCTFail("Cloudflare deploy should use the API, not an external CLI.") },
+                log: { _ in }
+            )
+            XCTFail("Expected Cloudflare 401 to throw without retrying.")
+        } catch {
+            XCTAssertTrue(String(describing: error).contains("invalid token"))
+        }
+
+        XCTAssertEqual(assetUploadAttempts, 1)
+    }
+
+    func testCloudflareUnknownAssetHashFailsWithoutUploadAttempts() async throws {
+        let root = try TemporaryDirectory()
+        try FileManager.default.createDirectory(at: root.url.appendingPathComponent("dist"), withIntermediateDirectories: true)
+        try "<h1>Hello</h1>".write(to: root.url.appendingPathComponent("dist/index.html"), atomically: true, encoding: .utf8)
+        let config = InksteadWriterConfig(
+            site: SiteConfig(title: "My Website", url: "https://example.com", author: "Your Name"),
+            deploy: DeployConfig(provider: .cloudflareWorkers, projectName: "my-worker")
+        )
+        var assetUploadAttempts = 0
+
+        do {
+            try await Deploy.deploySite(
+                root: root.url,
+                config: config,
+                env: ["CLOUDFLARE_ACCOUNT_ID": "account-id", "CLOUDFLARE_API_TOKEN": "api-token"],
+                http: { request in
+                    switch request.url?.path {
+                    case "/client/v4/accounts/account-id/workers/scripts/my-worker/assets-upload-session":
+                        return HTTPResponse(statusCode: 200, body: Data(#"{"success":true,"result":{"jwt":"upload-token","buckets":[["bogus-hash"]]}}"#.utf8))
+                    case "/client/v4/accounts/account-id/workers/assets/upload":
+                        assetUploadAttempts += 1
+                        return HTTPResponse(statusCode: 201, body: Data(#"{"success":true,"result":{"jwt":"completion-token"}}"#.utf8))
+                    default:
+                        XCTFail("Unexpected Cloudflare request: \(request.url?.absoluteString ?? "nil")")
+                        return HTTPResponse(statusCode: 404)
+                    }
+                },
+                run: { _, _ in XCTFail("Cloudflare deploy should use the API, not an external CLI.") },
+                log: { _ in }
+            )
+            XCTFail("Expected unknown asset hash to throw.")
+        } catch {
+            XCTAssertTrue(String(describing: error).contains("unknown asset hash bogus-hash"))
+        }
+
+        XCTAssertEqual(assetUploadAttempts, 0)
+    }
+
+    func testDeployReadsDotEnvStrippingQuotesAndExportPrefix() async throws {
+        let root = try TemporaryDirectory()
+        try FileManager.default.createDirectory(at: root.url.appendingPathComponent("dist"), withIntermediateDirectories: true)
+        try "<h1>Hello</h1>".write(to: root.url.appendingPathComponent("dist/index.html"), atomically: true, encoding: .utf8)
+        try """
+        # Netlify credentials
+        export NETLIFY_SITE_ID = "site-id"
+        NETLIFY_AUTH_TOKEN='token'
+        """.write(to: root.url.appendingPathComponent(".env"), atomically: true, encoding: .utf8)
+        let config = InksteadWriterConfig(
+            site: SiteConfig(title: "My Website", url: "https://example.com", author: "Your Name"),
+            deploy: DeployConfig(provider: .netlify)
+        )
+
+        var capturedRequest: URLRequest?
+        try await Deploy.deploySite(
+            root: root.url,
+            config: config,
+            env: [:],
+            http: { request in
+                capturedRequest = request
+                return HTTPResponse(statusCode: 200, body: Data(#"{"state":"ready"}"#.utf8))
+            },
+            run: { _, _ in XCTFail("Netlify deploy should use the API, not an external CLI.") }
+        )
+
+        let request = try XCTUnwrap(capturedRequest)
+        XCTAssertEqual(request.url?.absoluteString, "https://api.netlify.com/api/v1/sites/site-id/deploys")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer token")
+    }
+
     func testNetlifyRequiresEnvAndPostsZipToApi() async throws {
         let root = try TemporaryDirectory()
         try FileManager.default.createDirectory(at: root.url.appendingPathComponent("dist/assets"), withIntermediateDirectories: true)

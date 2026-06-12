@@ -154,6 +154,8 @@ public enum InksteadWriterReleaseResolver {
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: destination.path)
     }
 
+    private static let downloadLockStaleAge: TimeInterval = 10 * 60
+
     private static func withDownloadLock<T>(at lock: URL, body: () throws -> T) throws -> T {
         var locked = false
         for attempt in 0..<120 {
@@ -165,18 +167,33 @@ public enum InksteadWriterReleaseResolver {
                 if !FileManager.default.fileExists(atPath: lock.path) {
                     throw error
                 }
+                if downloadLockIsStale(at: lock) {
+                    try? FileManager.default.removeItem(at: lock)
+                    continue
+                }
                 if attempt == 119 {
-                    throw InksteadWriterError.io("Timed out waiting for another Inkstead Writer download to finish.")
+                    throw downloadLockTimeout(at: lock)
                 }
                 Thread.sleep(forTimeInterval: 1)
             }
         }
 
         guard locked else {
-            throw InksteadWriterError.io("Timed out waiting for another Inkstead Writer download to finish.")
+            throw downloadLockTimeout(at: lock)
         }
         defer { try? FileManager.default.removeItem(at: lock) }
         return try body()
+    }
+
+    private static func downloadLockIsStale(at lock: URL) -> Bool {
+        guard let modified = (try? FileManager.default.attributesOfItem(atPath: lock.path))?[.modificationDate] as? Date else {
+            return false
+        }
+        return Date().timeIntervalSince(modified) > downloadLockStaleAge
+    }
+
+    private static func downloadLockTimeout(at lock: URL) -> InksteadWriterError {
+        .io("Timed out waiting for another Inkstead Writer download to finish. Remove \(lock.path) if no other download is running.")
     }
 
     private static func verifyChecksum(for archive: URL, asset: String, checksums: URL) throws {

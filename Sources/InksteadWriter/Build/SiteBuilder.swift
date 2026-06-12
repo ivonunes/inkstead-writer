@@ -119,7 +119,8 @@ public enum SiteBuilder {
             try ImageOptimizer.copyOptimizedMedia(
                 from: root.appendingPathComponent(config.content.media),
                 to: dist.appendingPathComponent("media"),
-                config: config
+                config: config,
+                log: log
             )
         }
         if !mediaSummary.isEmpty {
@@ -140,7 +141,7 @@ public enum SiteBuilder {
                 try runHooks(config.hooks?.afterBuild, root: root)
             }
         }
-        log?("Build: completed in \(formatDuration(since: timer.started)).")
+        log?("Build: completed in \(BuildFormatting.formatDuration(since: timer.started)).")
     }
 
     private static func writePaginatedIndex(
@@ -193,37 +194,20 @@ public enum SiteBuilder {
     }
 
     private static func copyDirectoryContents(_ source: URL, to destination: URL) throws {
-        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
-        guard let enumerator = FileManager.default.enumerator(at: source, includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey]) else { return }
-        for case let item as URL in enumerator {
-            let relative = item.standardizedFileURL.path.replacingOccurrences(of: source.standardizedFileURL.path, with: "").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            guard !relative.isEmpty else { continue }
-            let target = destination.appendingPathComponent(relative)
-            let values = try item.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
-            if values.isDirectory == true {
-                try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
-            } else if values.isRegularFile == true {
-                try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try copyFileIfChanged(item, to: target)
-            }
+        for file in try FileTreeCopyPlan.regularFilePairs(from: source, to: destination) {
+            try FileManager.default.createDirectory(at: file.target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try copyFileIfChanged(file.source, to: file.target)
         }
     }
 
     private static func copyFileIfChanged(_ source: URL, to destination: URL) throws {
         if FileManager.default.fileExists(atPath: destination.path) {
-            if try filesHaveSameContents(source, destination) {
+            if try FileTreeSupport.filesHaveSameContents(source, destination) {
                 return
             }
             try FileManager.default.removeItem(at: destination)
         }
         try FileManager.default.copyItem(at: source, to: destination)
-    }
-
-    private static func filesHaveSameContents(_ lhs: URL, _ rhs: URL) throws -> Bool {
-        let leftValues = try lhs.resourceValues(forKeys: [.fileSizeKey])
-        let rightValues = try rhs.resourceValues(forKeys: [.fileSizeKey])
-        guard leftValues.fileSize == rightValues.fileSize else { return false }
-        return try Data(contentsOf: lhs) == Data(contentsOf: rhs)
     }
 
     private static func runHooks(_ hooks: [String]?, root: URL) throws {
@@ -237,13 +221,26 @@ public enum SiteBuilder {
             }
         }
     }
+}
 
-    fileprivate static func formatDuration(since start: Date) -> String {
-        let seconds = Date().timeIntervalSince(start)
-        if seconds < 10 {
-            return String(format: "%.2fs", seconds)
+enum FileTreeCopyPlan {
+    static func regularFilePairs(from source: URL, to destination: URL) throws -> [(source: URL, target: URL)] {
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        guard let enumerator = FileManager.default.enumerator(at: source, includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey]) else {
+            return []
         }
-        return String(format: "%.1fs", seconds)
+        var files: [(source: URL, target: URL)] = []
+        for case let item as URL in enumerator {
+            guard let relative = FileTreeSupport.relativePath(of: item, under: source), !relative.isEmpty else { continue }
+            let target = destination.appendingPathComponent(relative)
+            let values = try item.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
+            if values.isDirectory == true {
+                try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+            } else if values.isRegularFile == true {
+                files.append((item, target))
+            }
+        }
+        return files
     }
 }
 
@@ -258,7 +255,7 @@ private final class BuildPhaseTimer {
     func measure<Value>(_ label: String, _ work: () throws -> Value) rethrows -> Value {
         let phaseStarted = Date()
         defer {
-            log?("Build: \(label) in \(SiteBuilder.formatDuration(since: phaseStarted)).")
+            log?("Build: \(label) in \(BuildFormatting.formatDuration(since: phaseStarted)).")
         }
         return try work()
     }

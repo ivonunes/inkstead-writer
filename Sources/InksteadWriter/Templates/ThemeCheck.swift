@@ -473,8 +473,6 @@ public enum ThemeChecker {
     }
 
     private static func relativePath(_ url: URL, root: URL) -> String {
-        url.standardizedFileURL.path
-            .replacingOccurrences(of: root.standardizedFileURL.path, with: "")
-            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        FileTreeSupport.relativePath(of: url, under: root) ?? url.standardizedFileURL.path
     }
 }

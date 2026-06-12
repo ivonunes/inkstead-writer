@@ -1,124 +1,56 @@
 import Foundation
+import cmark_gfm
+import cmark_gfm_extensions
 
 public enum MarkdownRenderer {
     public static func render(_ markdown: String, config: InksteadWriterConfig? = nil) -> String {
         let allowHTML = config?.markdown?.html ?? true
         let hardBreaks = config?.markdown?.breaks ?? true
-        let normalized = markdown.replacingOccurrences(of: "\r\n", with: "\n")
-        let blocks = normalized.components(separatedBy: "\n\n")
-        var html = ""
-        for rawBlock in blocks {
-            let block = rawBlock.trimmingCharacters(in: .newlines)
-            if block.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { continue }
-            let trimmed = block.trimmingCharacters(in: .whitespacesAndNewlines)
-            if allowHTML, trimmed.hasPrefix("<"), trimmed.hasSuffix(">") {
-                html += "\(trimmed)\n"
-                continue
-            }
-            if let heading = heading(trimmed) {
-                html += "<h\(heading.level)>\(inline(heading.text))</h\(heading.level)>\n"
-                continue
-            }
-            if let list = list(trimmed) {
-                let tag = list.ordered ? "ol" : "ul"
-                html += "<\(tag)>\n"
-                for item in list.items {
-                    html += "<li>\(inline(item))</li>\n"
-                }
-                html += "</\(tag)>\n"
-                continue
-            }
-            if let quote = blockquote(trimmed, config: config) {
-                html += quote
-                continue
-            }
-            if let code = fencedCode(trimmed) {
-                html += code
-                continue
-            }
-            let body: String
-            if hardBreaks {
-                let normalizedBreaks = block.replacingOccurrences(of: #" {2,}\n"#, with: "\n", options: .regularExpression)
-                body = inline(normalizedBreaks).replacingOccurrences(of: "\n", with: "<br>\n")
-            } else {
-                body = inline(block).replacingOccurrences(of: "\n", with: " ")
-            }
-            html += "<p>\(body)</p>\n"
+        var options = CMARK_OPT_SMART | CMARK_OPT_FOOTNOTES | CMARK_OPT_VALIDATE_UTF8
+        if allowHTML {
+            options |= CMARK_OPT_UNSAFE
         }
-        return html
+        if hardBreaks {
+            options |= CMARK_OPT_HARDBREAKS
+        }
+        return normalizeVoidElements(renderGFM(markdown, options: options))
     }
 
     public static func inline(_ markdown: String) -> String {
-        var output = escape(markdown)
-        var placeholders: [String] = []
-        func placeholder(_ value: String) -> String {
-            placeholders.append(value)
-            let scalar = UnicodeScalar(0xE000 + placeholders.count - 1) ?? UnicodeScalar(0xFFFD)!
-            return String(Character(scalar))
-        }
-        output = replace(pattern: #"`([^`]+)`"#, in: output) { match in
-            placeholder("<code>\(match[1])</code>")
-        }
-        output = replace(pattern: #"!\[([^\]]*)\]\(([^)\s]+)(?:\s+&quot;[^&]*&quot;)?\)"#, in: output) { match in
-            let alt = match[1]
-            let src = match[2]
-            return #"<img src="\#(src)" alt="\#(alt)">"#
-        }
-        output = replace(pattern: #"\[([^\]]+)\]\(([^)]+)\)"#, in: output) { match in
-            #"<a href="\#(match[2])">\#(match[1])</a>"#
-        }
-        output = replace(pattern: #"\*\*([^*]+)\*\*"#, in: output) { match in
-            "<strong>\(match[1])</strong>"
-        }
-        output = replace(pattern: #"(^|[^*])_([^_]+)_"#, in: output) { match in
-            "\(match[1])<em>\(match[2])</em>"
-        }
-        for (index, value) in placeholders.enumerated() {
-            let scalar = UnicodeScalar(0xE000 + index) ?? UnicodeScalar(0xFFFD)!
-            output = output.replacingOccurrences(of: String(Character(scalar)), with: value)
-        }
-        return output.replacingOccurrences(of: "...", with: "…")
+        let html = render(markdown).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard html.hasPrefix("<p>"), html.hasSuffix("</p>") else { return html }
+        let body = String(html.dropFirst("<p>".count).dropLast("</p>".count))
+        guard !body.contains("<p>") else { return html }
+        return body
     }
 
-    private static func heading(_ block: String) -> (level: Int, text: String)? {
-        guard let match = firstMatch(pattern: #"^(#{1,6})\s+(.+)$"#, in: block) else { return nil }
-        return (match[1].count, match[2])
+    private static let coreExtensionsRegistered: Bool = {
+        cmark_gfm_core_extensions_ensure_registered()
+        return true
+    }()
+
+    private static let extensionNames = ["table", "strikethrough", "autolink", "tasklist"]
+
+    private static func renderGFM(_ markdown: String, options: Int32) -> String {
+        _ = coreExtensionsRegistered
+        guard let parser = cmark_parser_new(options) else { return "" }
+        defer { cmark_parser_free(parser) }
+        for name in extensionNames {
+            if let syntaxExtension = cmark_find_syntax_extension(name) {
+                cmark_parser_attach_syntax_extension(parser, syntaxExtension)
+            }
+        }
+        let normalized = markdown.replacingOccurrences(of: "\r\n", with: "\n")
+        cmark_parser_feed(parser, normalized, normalized.utf8.count)
+        guard let document = cmark_parser_finish(parser) else { return "" }
+        defer { cmark_node_free(document) }
+        guard let rendered = cmark_render_html(document, options, nil) else { return "" }
+        defer { free(rendered) }
+        return String(cString: rendered)
     }
 
-    private static func list(_ block: String) -> (ordered: Bool, items: [String])? {
-        let lines = block.components(separatedBy: "\n")
-        let unordered = lines.compactMap { line -> String? in
-            guard let match = firstMatch(pattern: #"^\s*[-*+]\s+(.+)$"#, in: line) else { return nil }
-            return match[1]
-        }
-        if unordered.count == lines.count {
-            return (false, unordered)
-        }
-        let ordered = lines.compactMap { line -> String? in
-            guard let match = firstMatch(pattern: #"^\s*\d+[.)]\s+(.+)$"#, in: line) else { return nil }
-            return match[1]
-        }
-        if ordered.count == lines.count {
-            return (true, ordered)
-        }
-        return nil
-    }
-
-    private static func blockquote(_ block: String, config: InksteadWriterConfig?) -> String? {
-        let lines = block.components(separatedBy: "\n")
-        let quoted = lines.compactMap { line -> String? in
-            guard let match = firstMatch(pattern: #"^\s*>\s?(.*)$"#, in: line) else { return nil }
-            return match[1]
-        }
-        guard quoted.count == lines.count else { return nil }
-        return "<blockquote>\n\(render(quoted.joined(separator: "\n"), config: config))</blockquote>\n"
-    }
-
-    private static func fencedCode(_ block: String) -> String? {
-        let lines = block.components(separatedBy: "\n")
-        guard let first = lines.first, first.hasPrefix("```"), lines.count >= 2, lines.last?.hasPrefix("```") == true else { return nil }
-        let body = lines.dropFirst().dropLast().joined(separator: "\n")
-        return "<pre><code>\(escapeCode(body))</code></pre>\n"
+    private static func normalizeVoidElements(_ html: String) -> String {
+        html.replacingOccurrences(of: #"<(br|hr|img|input)(\b[^>]*?)\s*/>"#, with: "<$1$2>", options: .regularExpression)
     }
 
     public static func plainTextForSyndication(_ markdown: String) -> String {
@@ -139,21 +71,6 @@ public enum MarkdownRenderer {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func escape(_ value: String) -> String {
-        value
-            .replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
-            .replacingOccurrences(of: "\"", with: "&quot;")
-    }
-
-    private static func escapeCode(_ value: String) -> String {
-        value
-            .replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
-    }
-
     private static func replace(pattern: String, in value: String, transform: ([String]) -> String) -> String {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return value }
         let ns = value as NSString
@@ -170,16 +87,5 @@ public enum MarkdownRenderer {
             }
         }
         return output
-    }
-
-    private static func firstMatch(pattern: String, in value: String) -> [String]? {
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
-        let ns = value as NSString
-        guard let match = regex.firstMatch(in: value, range: NSRange(location: 0, length: ns.length)) else { return nil }
-        return (0..<match.numberOfRanges).map { index in
-            let range = match.range(at: index)
-            if range.location == NSNotFound { return "" }
-            return ns.substring(with: range)
-        }
     }
 }

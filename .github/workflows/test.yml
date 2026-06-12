@@ -13,10 +13,18 @@ jobs:
     name: Linux
     runs-on: ubuntu-latest
     container:
-      image: swift:latest
+      image: swift:6.3
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Cache SwiftPM build
+        uses: actions/cache@v5
+        with:
+          path: .build
+          key: linux-test-swiftpm-${{ hashFiles('Package.resolved', 'Package.swift') }}
+          restore-keys: |
+            linux-test-swiftpm-
 
       - name: Test
         run: swift test
@@ -30,6 +38,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Cache SwiftPM build
+        uses: actions/cache@v5
+        with:
+          path: .build
+          key: macos-test-swiftpm-${{ hashFiles('Package.resolved', 'Package.swift') }}
+          restore-keys: |
+            macos-test-swiftpm-
 
       - name: Test
         run: swift test

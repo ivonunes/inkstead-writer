@@ -195,6 +195,37 @@ final class UpdateTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: binary.deletingLastPathComponent().appendingPathExtension("lock").path))
     }
 
+    func testReleaseResolverReclaimsStaleDownloadLock() throws {
+        let root = try TemporaryDirectory()
+        let platform = InksteadWriterReleasePlatform(os: "macos", arch: "arm64")
+        let asset = InksteadWriterReleaseResolver.assetName(for: platform, version: "9.0.0")
+        let archiveBytes = Data("archive bytes".utf8)
+        let checksum = SHA256.hex(archiveBytes)
+        let cacheRoot = root.url.appendingPathComponent("cache")
+        let cache = InksteadWriterReleaseResolver.cachedBinary(cacheRoot: cacheRoot, version: "9.0.0", platform: platform).deletingLastPathComponent()
+        let lock = cache.appendingPathExtension("lock")
+        try FileManager.default.createDirectory(at: lock, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -3600)], ofItemAtPath: lock.path)
+
+        let binary = try InksteadWriterReleaseResolver.resolve(version: "9.0.0", root: root.url, platform: platform, cacheRoot: cacheRoot) { command, _ in
+            if command.executable == "curl" {
+                let output = URL(fileURLWithPath: try XCTUnwrap(command.arguments.last))
+                if command.arguments.contains(where: { $0.hasSuffix("/inkstead-writer-v9.0.0-SHA256SUMS") }) {
+                    try "\(checksum)  \(asset)\n".write(to: output, atomically: true, encoding: .utf8)
+                } else {
+                    try archiveBytes.write(to: output)
+                }
+            } else if command.executable == "tar" {
+                try "binary".write(to: cache.appendingPathComponent("inkstead-writer"), atomically: true, encoding: .utf8)
+            } else {
+                XCTFail("Unexpected command \(command.executable)")
+            }
+        }
+
+        XCTAssertTrue(FileManager.default.isExecutableFile(atPath: binary.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: lock.path))
+    }
+
     func testReleaseResolverRejectsChecksumMismatch() throws {
         let root = try TemporaryDirectory()
         let platform = InksteadWriterReleasePlatform(os: "macos", arch: "arm64")

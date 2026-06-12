@@ -74,11 +74,55 @@ public enum SyndicationText {
 public enum SyndicationFrontmatter {
     public static func update(markdown: String, provider: SyndicationProviderName, result: SyndicationResult) -> String {
         let parsed = FrontmatterParser.parse(markdown)
-        var frontmatter = parsed.frontmatter
-        var syndication = frontmatter["syndication"]?.object ?? [:]
+        var syndication = parsed.frontmatter["syndication"]?.object ?? [:]
         syndication[provider.rawValue] = .object(result.frontmatterObject())
-        frontmatter["syndication"] = .object(syndication)
-        return "---\n\(FrontmatterParser.serializeYamlSubset(frontmatter))\n---\n\n\(parsed.body.trimmingCharacters(in: .newlines))\n"
+        let block = FrontmatterParser.serializeYamlSubset(["syndication": .object(syndication)])
+        guard let yamlRange = frontmatterRange(of: markdown) else {
+            return "---\n\(block)\n---\n\n\(markdown)"
+        }
+        let lines = String(markdown[yamlRange]).components(separatedBy: "\n")
+        let spliced = splice(block: block, into: lines)
+        return String(markdown[..<yamlRange.lowerBound]) + spliced.joined(separator: "\n") + String(markdown[yamlRange.upperBound...])
+    }
+
+    private static func frontmatterRange(of markdown: String) -> Range<String.Index>? {
+        let newline = markdown.hasPrefix("---\r\n") ? "\r\n" : "\n"
+        guard markdown.hasPrefix("---\(newline)") else { return nil }
+        let start = markdown.index(markdown.startIndex, offsetBy: 3 + newline.count)
+        let marker = "\(newline)---\(newline)"
+        if let close = markdown.range(of: marker, range: start..<markdown.endIndex) {
+            return start..<close.lowerBound
+        }
+        let closeAtEnd = "\(newline)---"
+        if markdown.hasSuffix(closeAtEnd), markdown.distance(from: start, to: markdown.endIndex) >= closeAtEnd.count {
+            return start..<markdown.index(markdown.endIndex, offsetBy: -closeAtEnd.count)
+        }
+        return nil
+    }
+
+    private static func splice(block: String, into lines: [String]) -> [String] {
+        let blockLines = block.components(separatedBy: "\n")
+        guard let start = lines.firstIndex(where: isTopLevelSyndicationKey) else {
+            return lines + blockLines
+        }
+        var last = start
+        var index = start + 1
+        while index < lines.count {
+            let line = lines[index]
+            if line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                index += 1
+                continue
+            }
+            guard let first = line.first, first == " " || first == "\t" else { break }
+            last = index
+            index += 1
+        }
+        return Array(lines[..<start]) + blockLines + Array(lines[(last + 1)...])
+    }
+
+    private static func isTopLevelSyndicationKey(_ line: String) -> Bool {
+        guard let first = line.first, first != " ", first != "\t" else { return false }
+        return line.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("syndication:")
     }
 }
 
@@ -162,7 +206,37 @@ public struct HTTPResponse: Sendable {
 public typealias HTTPClient = (URLRequest) async throws -> HTTPResponse
 
 public enum DefaultHTTPClient {
+    public static let requestTimeout: TimeInterval = 60
+    static let maxRetries = 2
+
     public static func send(_ request: URLRequest) async throws -> HTTPResponse {
+        try await send(request, transport: transport) { seconds in
+            try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+        }
+    }
+
+    static func send(
+        _ request: URLRequest,
+        transport: (URLRequest) async throws -> HTTPResponse,
+        sleep: (TimeInterval) async throws -> Void
+    ) async throws -> HTTPResponse {
+        var request = request
+        request.timeoutInterval = requestTimeout
+        var retries = 0
+        while true {
+            let response = try await transport(request)
+            guard response.statusCode == 429, retries < maxRetries else { return response }
+            retries += 1
+            try await sleep(min(retryAfterSeconds(response) ?? 1, 60))
+        }
+    }
+
+    static func retryAfterSeconds(_ response: HTTPResponse) -> TimeInterval? {
+        guard let raw = response.headers.first(where: { $0.key.lowercased() == "retry-after" })?.value else { return nil }
+        return TimeInterval(raw.trimmingCharacters(in: .whitespaces))
+    }
+
+    private static func transport(_ request: URLRequest) async throws -> HTTPResponse {
         let (data, response) = try await URLSession.shared.data(for: request)
         let httpResponse = response as? HTTPURLResponse
         let status = httpResponse?.statusCode ?? 0

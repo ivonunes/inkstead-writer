@@ -272,6 +272,8 @@ public enum SiteInitializer {
                 names.append(contentsOf: ["BLUESKY_IDENTIFIER", "BLUESKY_APP_PASSWORD"])
             case .flickr:
                 names.append(contentsOf: ["FLICKR_API_KEY", "FLICKR_API_SECRET", "FLICKR_ACCESS_TOKEN", "FLICKR_ACCESS_SECRET"])
+            case .pixelfed:
+                names.append(contentsOf: ["PIXELFED_INSTANCE_URL", "PIXELFED_ACCESS_TOKEN"])
             }
         }
         return Array(Set(names)).sorted()

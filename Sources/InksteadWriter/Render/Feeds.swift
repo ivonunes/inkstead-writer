@@ -8,7 +8,7 @@ public enum FeedRenderer {
         path: String = "/feed.xml",
         presentationScriptSrc: String = "",
         presentationStyleHrefs: [String] = [],
-        category: CategoryCollection? = nil
+        category: [String: Any]? = nil
     ) -> [String: Any] {
         let feedTitle = title ?? config.site.title
         let feedPath = path.hasPrefix("/") ? path : "/\(path)"
@@ -23,7 +23,7 @@ public enum FeedRenderer {
             "description": config.site.description ?? config.site.title,
             "presentationScriptSrc": presentationScriptSrc,
             "presentationStyleHrefs": presentationStyleHrefs,
-            "category": category.map(serializeCategory) ?? NSNull(),
+            "category": category ?? NSNull(),
             "items": limitedPosts(config: config, posts: posts).map { post in
                 [
                     "title": post.title ?? "",
@@ -41,7 +41,7 @@ public enum FeedRenderer {
         posts: [NormalizedPost],
         title: String? = nil,
         path: String = "/feed.json",
-        category: CategoryCollection? = nil
+        category: [String: Any]? = nil
     ) -> [String: Any] {
         let feedTitle = title ?? config.site.title
         let feedPath = path.hasPrefix("/") ? path : "/\(path)"
@@ -55,7 +55,7 @@ public enum FeedRenderer {
             "siteUrl": config.site.url,
             "homePageUrl": "\(siteUrl)/",
             "description": config.site.description ?? "",
-            "category": category.map(serializeCategory) ?? NSNull(),
+            "category": category ?? NSNull(),
             "items": limitedPosts(config: config, posts: posts).enumerated().map { index, post in
                 [
                     "comma": index == 0 ? "" : ",",

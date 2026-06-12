@@ -4,7 +4,10 @@ import XCTest
 
 final class DocumentationTests: XCTestCase {
     private var root: URL {
-        URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
     }
 
     func testReferencedDocsAssetsExist() throws {

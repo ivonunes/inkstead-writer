@@ -2,7 +2,19 @@
 
 Syndication is optional. Choose services during `inkstead-writer init`, or add them later in `inkstead-writer.json` when you want Inkstead Writer to publish posts to social platforms as part of `./inkstead-writer publish`.
 
-Add `syndicate` to a post:
+The site-level configuration lists the enabled providers:
+
+```json
+{
+  "syndication": {
+    "providers": ["mastodon", "bluesky"]
+  }
+}
+```
+
+Provider names are `mastodon`, `bluesky`, `pixelfed`, and `flickr`. Enabled providers are offered as defaults when you create posts and are checked by `doctor` and `requirements`.
+
+Each post still opts in individually. Add `syndicate` to a post:
 
 ```yaml
 syndicate:
@@ -13,9 +25,11 @@ Titled posts syndicate as title plus canonical URL. Untitled notes syndicate as 
 
 For photo notes, Inkstead Writer prepares temporary optimised copies when a service has image size or dimension limits. Your original files stay unchanged.
 
-After a service publishes successfully, Inkstead Writer writes the result back to the post under `syndication`. Future publishes skip anything already marked as published, so the command is safe to run again.
+After each attempt, Inkstead Writer writes the result back to the post under `syndication`, so the post records what happened. Successful targets are marked `published`, failed targets record the error, and recorded targets are never attempted again automatically. Syndication failures are logged but do not fail `publish` or your CI pipeline.
 
-Example result:
+To retry a failed target, fix the cause, then delete that provider's entry from the post's `syndication` block and publish again.
+
+Example results:
 
 ```yaml
 syndication:
@@ -24,10 +38,18 @@ syndication:
     url: https://social.example/you/123
 ```
 
+```yaml
+syndication:
+  provider-name:
+    status: failed
+    error: "provider-name returned 403: ..."
+```
+
 `./inkstead-writer publish` deploys the website before syndication runs so canonical links are already live.
 
 Provider guides:
 
 - [Bluesky](/syndication/bluesky/)
 - [Mastodon](/syndication/mastodon/)
+- [Pixelfed](/syndication/pixelfed/)
 - [Flickr](/syndication/flickr/)

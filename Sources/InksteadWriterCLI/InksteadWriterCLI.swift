@@ -53,15 +53,15 @@ struct InksteadWriterCLI {
                 try await Deploy.deploySite(root: root, config: try ConfigLoader.load(root: root))
             case "dev":
                 let config = try ConfigLoader.load(root: root)
-                let server = DevServer(root: root, config: config, port: Int(value(after: "--port", in: arguments) ?? value(after: "-p", in: arguments) ?? "4321") ?? 4321)
+                let server = DevServer(root: root, config: config, port: try port(in: arguments))
                 try server.start()
-                print("Inkstead Writer dev server running at \(TerminalStyle.accent("http://localhost:\(server.port)"))")
+                print("Inkstead Writer dev server running at \(TerminalStyle.accent("http://localhost:\(server.port)")) (live reload enabled)")
                 while true {
                     try await Task.sleep(nanoseconds: 60 * 1_000_000_000)
                 }
             case "syndicate":
                 let config = try ConfigLoader.load(root: root)
-                let result = await Syndicator.syndicateSite(root: root, config: config)
+                let result = try await Syndicator.syndicateSite(root: root, config: config)
                 print("Syndication complete. Published: \(result.published). Failed: \(result.failed).")
             case "publish":
                 let config = try ConfigLoader.load(root: root)
@@ -78,7 +78,7 @@ struct InksteadWriterCLI {
             case "migrate":
                 try runMigration(root: root, arguments: arguments)
             case "update":
-                let targetVersion = value(after: "--to", in: arguments)
+                let targetVersion = try value(after: "--to", in: arguments)
                 let checkOnly = arguments.contains("--check")
                 let dryRun = checkOnly || arguments.contains("--dry-run")
                 let result = try await SiteUpdater.update(root: root, requestedVersion: targetVersion, dryRun: dryRun)
@@ -119,10 +119,22 @@ struct InksteadWriterCLI {
         exit(1)
     }
 
-    static func value(after flag: String, in arguments: [String]) -> String? {
+    static func value(after flag: String, in arguments: [String]) throws -> String? {
         guard let index = arguments.firstIndex(of: flag) else { return nil }
         let next = arguments.index(after: index)
-        guard next < arguments.endIndex else { return nil }
+        guard next < arguments.endIndex, !arguments[next].hasPrefix("-") else {
+            throw InksteadWriterError.config("\(flag) requires a value.")
+        }
         return arguments[next]
+    }
+
+    static func port(in arguments: [String]) throws -> Int {
+        guard let raw = try value(after: "--port", in: arguments) ?? value(after: "-p", in: arguments) else {
+            return 4321
+        }
+        guard let port = Int(raw), (1...65535).contains(port) else {
+            throw InksteadWriterError.config("--port must be a number between 1 and 65535, got \(raw).")
+        }
+        return port
     }
 }

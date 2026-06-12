@@ -4,6 +4,8 @@ Generated sites include `.github/workflows/publish.yml` so the site can publish 
 
 The generated workflow checks out the repository and runs `./inkstead-writer publish`. It also supports manual runs from the GitHub Actions tab.
 
+If the site deploys to GitHub Pages, see [GitHub Pages](/deployment/github-pages/) for the repository settings that pair with this workflow.
+
 ## Set Up Secrets
 
 Run `./inkstead-writer requirements`, then add the listed environment variable names as GitHub repository secrets. The exact list depends on your publishing and syndication setup.

@@ -129,7 +129,7 @@ extension ThemeRenderer {
     func writePlumeRuntimeIfNeeded() throws {
         let output = dist.appendingPathComponent("assets/plume-runtime.js")
         guard !FileManager.default.fileExists(atPath: output.path) else { return }
-        try write(PlumeRuntime.javascript, to: output)
+        try write(PlumeBrowserRuntime.javaScript, to: output)
     }
 
     func plumeNavigationScripts(_ navigation: [PlumeNavigationResource]) throws -> String {

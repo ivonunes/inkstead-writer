@@ -31,13 +31,17 @@ enum BuildConcurrency {
         queue.maxConcurrentOperationCount = workerCount(for: items.count)
         let errors = ParallelErrorBox()
         for item in items {
-            queue.addOperation {
+            let operation = BlockOperation()
+            operation.addExecutionBlock { [weak operation] in
+                guard operation?.isCancelled == false else { return }
                 do {
                     try body(item)
                 } catch {
                     errors.setIfEmpty(error)
+                    queue.cancelAllOperations()
                 }
             }
+            queue.addOperation(operation)
         }
         queue.waitUntilAllOperationsAreFinished()
 
@@ -62,13 +66,17 @@ enum BuildConcurrency {
         let errors = ParallelErrorBox()
         let results = ParallelResultsBox<Output>(count: items.count)
         for (index, item) in items.enumerated() {
-            queue.addOperation {
+            let operation = BlockOperation()
+            operation.addExecutionBlock { [weak operation] in
+                guard operation?.isCancelled == false else { return }
                 do {
                     results.set(try transform(item), at: index)
                 } catch {
                     errors.setIfEmpty(error)
+                    queue.cancelAllOperations()
                 }
             }
+            queue.addOperation(operation)
         }
         queue.waitUntilAllOperationsAreFinished()
 

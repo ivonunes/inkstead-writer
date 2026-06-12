@@ -111,6 +111,68 @@ final class ConfigLoaderTests: XCTestCase {
         XCTAssertEqual(config.data?["links"]?.file, "data/links.json")
     }
 
+    func testSupportsLineAndBlockCommentsInTypeScriptConfig() throws {
+        let config = try ConfigLoader.loadTypeScriptConfig("""
+        export default defineConfig({
+          /* block comment
+             spanning lines */
+          site: {
+            title: "My Website", // line comment
+            url: "https://example.com", /* inline */ author: "Your Name"
+          }
+        });
+        """)
+
+        XCTAssertEqual(config.site.title, "My Website")
+        XCTAssertEqual(config.site.author, "Your Name")
+    }
+
+    func testParseErrorsIncludeLineAndColumn() throws {
+        XCTAssertThrowsError(try ConfigLoader.loadTypeScriptConfig("""
+        export default defineConfig({
+          site: { title: "My Website",
+            url: }
+        });
+        """)) { error in
+            let message = String(describing: error)
+            XCTAssertTrue(message.contains("line 3"), message)
+            XCTAssertTrue(message.contains("defineConfig literal"), message)
+        }
+    }
+
+    func testDecodingErrorsIncludeFileNameAndCodingPath() throws {
+        let root = try TemporaryDirectory()
+        try Data("""
+        {
+          "site": { "title": "My Website", "url": "https://example.com", "author": 7 }
+        }
+        """.utf8).write(to: root.url.appendingPathComponent(InksteadWriterMetadata.configFileName))
+
+        XCTAssertThrowsError(try ConfigLoader.load(root: root.url)) { error in
+            let message = String(describing: error)
+            XCTAssertTrue(message.contains(InksteadWriterMetadata.configFileName), message)
+            XCTAssertTrue(message.contains("site.author"), message)
+        }
+    }
+
+    func testLoadIfPresentDistinguishesAbsentFromInvalidConfig() throws {
+        let empty = try TemporaryDirectory()
+        XCTAssertNil(try ConfigLoader.loadIfPresent(root: empty.url))
+
+        let broken = try TemporaryDirectory()
+        try Data("{ not json".utf8).write(to: broken.url.appendingPathComponent(InksteadWriterMetadata.configFileName))
+        XCTAssertThrowsError(try ConfigLoader.loadIfPresent(root: broken.url))
+
+        let valid = try TemporaryDirectory()
+        try Data("""
+        {
+          "version": "2.0.0",
+          "site": { "title": "My Website", "url": "https://example.com", "author": "Your Name" }
+        }
+        """.utf8).write(to: valid.url.appendingPathComponent(InksteadWriterMetadata.configFileName))
+        XCTAssertEqual(try ConfigLoader.loadIfPresent(root: valid.url)?.site.title, "My Website")
+    }
+
     func testLegacyFlatWriterConfigDefaultsToLegacyVersionForMigrations() throws {
         let config = try ConfigLoader.loadTypeScriptConfig("""
         export default defineConfig({
@@ -127,5 +189,19 @@ final class ConfigLoaderTests: XCTestCase {
 
         XCTAssertEqual(config.recordedVersion, "1.2.0")
         XCTAssertEqual(config.connection?.repository, "me/site")
+    }
+
+    func testUnknownSyndicationProvidersAreDroppedNotFatal() throws {
+        let root = try TemporaryDirectory()
+        try """
+        {
+          "version": "2.1.0",
+          "site": { "title": "My Website", "url": "https://example.com", "author": "Your Name" },
+          "syndication": { "providers": ["mastodon", "x", "myspace"] }
+        }
+        """.write(to: root.url.appendingPathComponent("inkstead-writer.json"), atomically: true, encoding: .utf8)
+
+        let config = try ConfigLoader.load(root: root.url)
+        XCTAssertEqual(config.syndication?.providers, [.mastodon])
     }
 }

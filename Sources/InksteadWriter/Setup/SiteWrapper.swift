@@ -237,13 +237,18 @@ public enum SiteWrapper {
         Commands:
           build        Build the current site
           cache        List or clean downloaded Inkstead Writer binaries
+          deploy       Deploy an already-built site
           dev          Build and serve the site locally
           doctor       Check site setup
           init         Create a new site
           migrate      Apply site migrations
+          new          Create a new article or note
           publish      Build, deploy, syndicate, and redeploy if needed
+          requirements Print required environment variables
+          syndicate    Publish posts to configured syndication providers
           theme        Check, format, eject, or serve theme tooling
           update       Download the latest Inkstead Writer and migrate the site
+          version      Print the Inkstead Writer site format version
         EOF
             exit 0
             ;;

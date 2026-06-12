@@ -218,10 +218,9 @@ extension ThemeRenderer {
         guard shouldProcess else {
             return try Data(contentsOf: source)
         }
-        let sourceData = try Data(contentsOf: source)
         let cacheURL = plumeImageVariantCacheURL(
             source: source,
-            sourceData: sourceData,
+            contentHash: try FileContentHashCache.shared.hash(of: source),
             maxWidth: maxWidth,
             maxHeight: maxHeight,
             options: options
@@ -229,6 +228,7 @@ extension ThemeRenderer {
         if let cached = try? Data(contentsOf: cacheURL), !cached.isEmpty {
             return cached
         }
+        let sourceData = try Data(contentsOf: source)
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent("inkstead-writer-plume-asset-\(UUID().uuidString).\(source.pathExtension)")
         defer { try? FileManager.default.removeItem(at: temp) }
         try sourceData.write(to: temp, options: .atomic)
@@ -246,14 +246,14 @@ extension ThemeRenderer {
 
     private func plumeImageVariantCacheURL(
         source: URL,
-        sourceData: Data,
+        contentHash: String,
         maxWidth: Int?,
         maxHeight: Int?,
         options: ImageOptimizationOptions
     ) -> URL {
         let key = [
             source.standardizedFileURL.path,
-            SHA256.hex(sourceData),
+            contentHash,
             maxWidth.map(String.init) ?? "",
             maxHeight.map(String.init) ?? "",
             String(options.maxWidth),

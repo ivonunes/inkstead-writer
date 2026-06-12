@@ -1,7 +1,7 @@
 import Foundation
 
 public enum InksteadWriterMetadata {
-    public static let currentVersion = "2.0.5"
+    public static let currentVersion = "2.1.0"
     public static let configFileName = "inkstead-writer.json"
     public static let legacyConfigFileName = "inkstead.json"
     public static let executableName = "inkstead-writer"
@@ -305,10 +305,27 @@ public enum SyndicationProviderName: String, Codable, Equatable, CaseIterable {
     case mastodon
     case bluesky
     case flickr
+    case pixelfed
 }
 
 public struct SyndicationConfig: Codable, Equatable {
     public var providers: [SyndicationProviderName]
+
+    public init(providers: [SyndicationProviderName]) {
+        self.providers = providers
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case providers
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let names = try container.decodeIfPresent([String].self, forKey: .providers) ?? []
+        // Unknown names are dropped rather than failing the whole config, so
+        // sites configured for a provider that no longer exists keep loading.
+        providers = names.compactMap(SyndicationProviderName.init(rawValue:))
+    }
 }
 
 public struct InksteadWriterConfig: Codable, Equatable, @unchecked Sendable {

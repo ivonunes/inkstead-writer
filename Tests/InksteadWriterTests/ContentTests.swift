@@ -66,7 +66,7 @@ final class ContentTests: XCTestCase {
         XCTAssertTrue(html.contains("<ol>\n<li>first</li>\n<li>second</li>\n</ol>"))
         XCTAssertTrue(html.contains(#"<blockquote>"#))
         XCTAssertTrue(html.contains(#"<a href="https://example.com">link</a>"#))
-        XCTAssertTrue(html.contains(#"<pre><code>let value = "&lt;escaped&gt;"</code></pre>"#))
+        XCTAssertTrue(html.contains("<pre><code class=\"language-swift\">let value = &quot;&lt;escaped&gt;&quot;\n</code></pre>"))
     }
 
     func testMarkdownRendererDoesNotDoubleRenderHardBreaks() {

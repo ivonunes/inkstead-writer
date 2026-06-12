@@ -5,13 +5,13 @@ public enum ConfigLoader {
         let jsonURL = root.appendingPathComponent(InksteadWriterMetadata.configFileName)
         if FileManager.default.fileExists(atPath: jsonURL.path) {
             let data = try Data(contentsOf: jsonURL)
-            return try validateVersion(JSONDecoder().decode(InksteadWriterConfig.self, from: data))
+            return try validateVersion(decode(data, file: InksteadWriterMetadata.configFileName))
         }
 
         let legacyJSONURL = root.appendingPathComponent(InksteadWriterMetadata.legacyConfigFileName)
         if FileManager.default.fileExists(atPath: legacyJSONURL.path) {
             let data = try Data(contentsOf: legacyJSONURL)
-            return try validateVersion(JSONDecoder().decode(InksteadWriterConfig.self, from: data))
+            return try validateVersion(decode(data, file: InksteadWriterMetadata.legacyConfigFileName))
         }
 
         let tsURL = root.appendingPathComponent("site.config.ts")
@@ -19,14 +19,46 @@ public enum ConfigLoader {
             throw InksteadWriterError.config("\(InksteadWriterMetadata.configFileName), \(InksteadWriterMetadata.legacyConfigFileName), or site.config.ts was not found.")
         }
         let source = try String(contentsOf: tsURL, encoding: .utf8)
-        return try validateVersion(loadTypeScriptConfig(source))
+        return try loadTypeScriptConfig(source)
+    }
+
+    /// Returns nil when no config file exists in `root`; throws when a config file exists but cannot be loaded.
+    public static func loadIfPresent(root: URL) throws -> InksteadWriterConfig? {
+        let candidates = [InksteadWriterMetadata.configFileName, InksteadWriterMetadata.legacyConfigFileName, "site.config.ts"]
+        guard candidates.contains(where: { FileManager.default.fileExists(atPath: root.appendingPathComponent($0).path) }) else {
+            return nil
+        }
+        return try load(root: root)
     }
 
     public static func loadTypeScriptConfig(_ source: String) throws -> InksteadWriterConfig {
         let literal = try extractDefineConfigLiteral(source)
         let parsed = try TypeScriptLiteralParser(literal).parse()
         let data = try JSONSerialization.data(withJSONObject: parsed, options: [])
-        return try validateVersion(JSONDecoder().decode(InksteadWriterConfig.self, from: data))
+        return try validateVersion(decode(data, file: "site.config.ts"))
+    }
+
+    private static func decode(_ data: Data, file: String) throws -> InksteadWriterConfig {
+        do {
+            return try JSONDecoder().decode(InksteadWriterConfig.self, from: data)
+        } catch let error as DecodingError {
+            throw InksteadWriterError.config("\(file): \(describe(error))")
+        }
+    }
+
+    private static func describe(_ error: DecodingError) -> String {
+        let context: DecodingError.Context?
+        switch error {
+        case .typeMismatch(_, let value), .valueNotFound(_, let value), .keyNotFound(_, let value), .dataCorrupted(let value):
+            context = value
+        @unknown default:
+            context = nil
+        }
+        guard let context else { return String(describing: error) }
+        let path = context.codingPath.map { key in
+            key.intValue.map { "[\($0)]" } ?? key.stringValue
+        }.joined(separator: ".")
+        return path.isEmpty ? context.debugDescription : "\(path): \(context.debugDescription)"
     }
 
     private static func validateVersion(_ config: InksteadWriterConfig) throws -> InksteadWriterConfig {
@@ -98,7 +130,7 @@ private final class TypeScriptLiteralParser {
     private func parseValue() throws -> Any {
         skipTrivia()
         guard let char = peek() else {
-            throw InksteadWriterError.parse("Unexpected end of config literal.")
+            throw error("Unexpected end of config literal.")
         }
         if char == "{" { return try parseObject() }
         if char == "[" { return try parseArray() }
@@ -148,7 +180,7 @@ private final class TypeScriptLiteralParser {
     private func parseKey() throws -> String {
         skipTrivia()
         guard let char = peek() else {
-            throw InksteadWriterError.parse("Unexpected end while reading object key.")
+            throw error("Unexpected end while reading object key.")
         }
         if char == "\"" || char == "'" { return try parseString() }
         return try parseIdentifier()
@@ -156,7 +188,7 @@ private final class TypeScriptLiteralParser {
 
     private func parseString() throws -> String {
         guard let quote = peek(), quote == "\"" || quote == "'" else {
-            throw InksteadWriterError.parse("Expected string literal.")
+            throw error("Expected string literal.")
         }
         index += 1
         var output = ""
@@ -179,7 +211,7 @@ private final class TypeScriptLiteralParser {
                 output.append(char)
             }
         }
-        throw InksteadWriterError.parse("Unterminated string literal.")
+        throw error("Unterminated string literal.")
     }
 
     private func parseNumber() throws -> Any {
@@ -193,7 +225,7 @@ private final class TypeScriptLiteralParser {
         let raw = String(input[start..<index])
         if let int = Int(raw) { return int }
         if let double = Double(raw) { return double }
-        throw InksteadWriterError.parse("Invalid number literal \(raw).")
+        throw error("Invalid number literal \(raw).")
     }
 
     private func parseIdentifier() throws -> String {
@@ -203,27 +235,51 @@ private final class TypeScriptLiteralParser {
             index += 1
         }
         if start == index {
-            throw InksteadWriterError.parse("Expected identifier.")
+            throw error("Expected identifier.")
         }
         return String(input[start..<index])
     }
 
     private func skipTrivia() {
-        while let char = peek(), char.isWhitespace {
-            index += 1
-        }
-        if peek() == "/", peek(ahead: 1) == "/" {
-            while let char = peek(), char != "\n" { index += 1 }
-            skipTrivia()
+        while true {
+            if let char = peek(), char.isWhitespace {
+                index += 1
+                continue
+            }
+            if peek() == "/", peek(ahead: 1) == "/" {
+                while let char = peek(), char != "\n" { index += 1 }
+                continue
+            }
+            if peek() == "/", peek(ahead: 1) == "*" {
+                index += 2
+                while index < input.count, !(peek() == "*" && peek(ahead: 1) == "/") { index += 1 }
+                index = min(index + 2, input.count)
+                continue
+            }
+            break
         }
     }
 
     private func consume(_ expected: Character) throws {
         skipTrivia()
         guard peek() == expected else {
-            throw InksteadWriterError.parse("Expected \(expected).")
+            throw error("Expected \(expected).")
         }
         index += 1
+    }
+
+    private func error(_ message: String) -> InksteadWriterError {
+        var line = 1
+        var column = 1
+        for char in input[..<min(index, input.count)] {
+            if char == "\n" {
+                line += 1
+                column = 1
+            } else {
+                column += 1
+            }
+        }
+        return .parse("\(message) (line \(line), column \(column) of the defineConfig literal)")
     }
 
     private func consumeIf(_ expected: Character) throws -> Bool {
