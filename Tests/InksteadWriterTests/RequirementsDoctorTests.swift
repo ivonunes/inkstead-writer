@@ -41,7 +41,6 @@ final class RequirementsDoctorTests: XCTestCase {
         XCTAssertTrue(result.output.contains("CLOUDFLARE_API_TOKEN is missing"))
         XCTAssertTrue(result.output.contains("MASTODON_ACCESS_TOKEN is missing"))
         XCTAssertTrue(result.output.contains("differs from Inkstead Writer's current template"))
-        XCTAssertFalse(result.output.contains("Agent Context"))
         XCTAssertGreaterThan(result.issues, 0)
 
         let plan = try MigrationPlanner.plan(root: root.url, config: config)

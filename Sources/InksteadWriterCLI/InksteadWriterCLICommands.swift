@@ -107,9 +107,6 @@ extension InksteadWriterCLI {
                 print("Theme check passed (\(result.checkedFiles.count) templates\(suffix)).")
                 return
             }
-            print(
-                "AI coding agents should use AGENTS.md for project-specific Plume guidance when available."
-            )
             exit(1)
         case "format":
             let options = Array(arguments.dropFirst(2))

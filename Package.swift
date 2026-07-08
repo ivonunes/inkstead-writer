@@ -5,14 +5,14 @@ import PackageDescription
 let package = Package(
     name: "InksteadWriter",
     platforms: [
-        .macOS(.v13)
+        .macOS(.v14)
     ],
     products: [
         .library(name: "InksteadWriter", targets: ["InksteadWriter"]),
         .executable(name: "inkstead-writer", targets: ["InksteadWriterCLI"])
     ],
     dependencies: [
-        .package(url: "https://github.com/ivonunes/plume.git", from: "1.1.0"),
+        .package(url: "https://github.com/ivonunes/plumekit.git", from: "2.0.0"),
         .package(url: "https://github.com/apple/swift-cmark.git", from: "0.8.0"),
         .package(path: "ThirdParty/libjpeg-turbo"),
         .package(path: "ThirdParty/libspng"),
@@ -22,7 +22,7 @@ let package = Package(
         .target(
             name: "InksteadWriter",
             dependencies: [
-                .product(name: "Plume", package: "plume"),
+                .product(name: "Plume", package: "plumekit"),
                 .product(name: "cmark-gfm", package: "swift-cmark"),
                 .product(name: "cmark-gfm-extensions", package: "swift-cmark"),
                 .product(name: "JPEGTurbo", package: "libjpeg-turbo"),
@@ -38,7 +38,7 @@ let package = Package(
         ),
         .executableTarget(name: "InksteadWriterCLI", dependencies: [
             "InksteadWriter",
-            .product(name: "Plume", package: "plume")
+            .product(name: "Plume", package: "plumekit")
         ]),
         .executableTarget(name: "InksteadWriterAssets"),
         .plugin(
@@ -48,7 +48,7 @@ let package = Package(
         ),
         .testTarget(name: "InksteadWriterTests", dependencies: [
             "InksteadWriter",
-            .product(name: "Plume", package: "plume"),
+            .product(name: "Plume", package: "plumekit"),
             .product(name: "JPEGTurbo", package: "libjpeg-turbo"),
             .product(name: "PNGCodec", package: "libspng"),
             .product(name: "WebP", package: "libwebp")

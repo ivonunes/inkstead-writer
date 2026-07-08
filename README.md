@@ -9,7 +9,7 @@ Inkstead Writer supports macOS and Linux.
 Install the `inkstead-writer` launcher, then create and preview a site:
 
 ```bash
-curl -fsSL https://install.inkstead.dev/writer | sh
+curl -fsSL https://install.inkstead.app | sh
 inkstead-writer init my-site
 cd my-site
 ./inkstead-writer doctor

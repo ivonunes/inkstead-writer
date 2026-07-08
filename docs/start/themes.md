@@ -2,7 +2,7 @@
 
 Inkstead Writer ships with a default theme. Add `.plume` files when you want to replace part of it with your own design.
 
-Plume is the template language used by Inkstead Writer. This page focuses on how Writer loads themes and what data it passes to them. For the language itself, use the [Plume syntax reference](https://inkstead.dev/plume/syntax/), [component guide](https://inkstead.dev/plume/components/), [resources guide](https://inkstead.dev/plume/customise/resources/), and [behaviour guide](https://inkstead.dev/plume/customise/behaviour/).
+Plume is the template language used by Inkstead Writer. This page focuses on how Writer loads themes and what data it passes to them. For the language itself, use the [Plume syntax reference](https://plumekit.dev/docs/syntax/), [component guide](https://plumekit.dev/docs/components/), [resources guide](https://plumekit.dev/docs/customise/resources/), and [behaviour guide](https://plumekit.dev/docs/customise/behaviour/).
 
 ## Start From The Default Theme
 
@@ -102,7 +102,7 @@ Run the language server for editor integrations:
 ./inkstead-writer theme language-server
 ```
 
-Inkstead Writer includes Plume, so the generated `./inkstead-writer` command uses the Plume version tied to that site. Standalone Plume CLI and editor details live in the [Plume tooling docs](https://inkstead.dev/plume/tooling/).
+Inkstead Writer includes Plume, so the generated `./inkstead-writer` command uses the Plume version tied to that site. Standalone Plume CLI and editor details live in the [Plume tooling docs](https://plumekit.dev/docs/tooling/).
 
 ## Assets And Images
 
@@ -158,7 +158,7 @@ You can also write inline resource blocks:
 }
 ```
 
-For the full resource model, see [Plume resources](https://inkstead.dev/plume/customise/resources/).
+For the full resource model, see [Plume resources](https://plumekit.dev/docs/customise/resources/).
 
 ## Interactivity
 
@@ -190,7 +190,7 @@ Use `@navigation` in `theme/layouts/default.plume` when same-origin links should
 }
 ```
 
-See the [Plume behaviour guide](https://inkstead.dev/plume/customise/behaviour/) for state, actions, measurement, viewport events, scripts, and navigation hooks.
+See the [Plume behaviour guide](https://plumekit.dev/docs/customise/behaviour/) for state, actions, measurement, viewport events, scripts, and navigation hooks.
 
 ## Template Context
 

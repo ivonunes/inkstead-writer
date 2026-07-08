@@ -5,7 +5,7 @@ Inkstead Writer turns Markdown files into a personal website. It runs on macOS a
 Install the launcher:
 
 ```bash
-curl -fsSL https://install.inkstead.dev/writer | sh
+curl -fsSL https://install.inkstead.app | sh
 ```
 
 Or, on macOS with Homebrew:
@@ -26,7 +26,7 @@ cd my-site
 The installer writes to `/usr/local/bin` by default. To install somewhere else, run:
 
 ```bash
-curl -fsSL https://install.inkstead.dev/writer | sh -s -- --dir "$HOME/.local/bin"
+curl -fsSL https://install.inkstead.app | sh -s -- --dir "$HOME/.local/bin"
 ```
 
 During `init`, choose where you want to publish, whether you want automated publishing, whether posts should syndicate to social media, and whether you want to configure the Inkstead app connection. You can accept the defaults and add more later in `inkstead-writer.json`.

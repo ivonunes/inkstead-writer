@@ -194,14 +194,6 @@ public enum SiteInitializer {
         return nextSteps(projectName: projectName, config: config)
     }
 
-    @discardableResult
-    public static func writeAgentContext(at root: URL) throws -> String {
-        let config = try ConfigLoader.load(root: root)
-        let url = root.appendingPathComponent(AgentContextRenderer.fileName)
-        try AgentContextRenderer.render(root: root, config: config).write(to: url, atomically: true, encoding: .utf8)
-        return AgentContextRenderer.fileName
-    }
-
     private static func siteConfig(projectName: String, options: InitSiteOptions) -> InksteadWriterConfig {
         var config = InksteadWriterConfig(
             site: SiteConfig(title: "My Website", url: "https://example.com", author: "Your Name", description: "Notes, photos, and longer writing."),

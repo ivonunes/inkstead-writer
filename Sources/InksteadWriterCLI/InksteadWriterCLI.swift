@@ -30,13 +30,6 @@ struct InksteadWriterCLI {
                 let message = try SiteInitializer.initSite(at: target, options: parsed.options)
                 try InksteadWriterReleaseResolver.seedCurrentBinary(root: target, executablePath: CommandLine.arguments.first, cwd: root)
                 printInitSuccess(directory: parsed.directory, options: parsed.options, fallback: message)
-                if isInteractiveTerminal {
-                    print()
-                }
-                if isInteractiveTerminal, promptYesNo("Generate AGENTS.md for AI coding agents?", defaultValue: true) {
-                    try SiteInitializer.writeAgentContext(at: target)
-                    print(TerminalStyle.green("Created AGENTS.md."))
-                }
             case "build":
                 let config = try ConfigLoader.load(root: root)
                 try SiteBuilder.build(root: root, config: config, log: { print($0) })

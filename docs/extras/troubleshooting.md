@@ -8,10 +8,6 @@ Start with:
 
 Doctor checks config, content folders, environment variables, CI setup, deployment requirements, syndication requirements, and common content errors.
 
-## AI Coding Agents
-
-Interactive `inkstead-writer init` can generate an `AGENTS.md` file with project-specific Inkstead Writer and Plume guidance.
-
 ## Common Fixes
 
 If environment variables are missing, copy `.env.example` to `.env` for local publishing and fill in the values. For CI publishing, add the same names as secrets or variables.

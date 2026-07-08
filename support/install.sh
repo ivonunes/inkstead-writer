@@ -11,8 +11,8 @@ usage() {
 Inkstead Writer installer
 
 Usage:
-  curl -fsSL https://install.inkstead.dev/writer | sh
-  curl -fsSL https://install.inkstead.dev/writer | sh -s -- --dir "$HOME/.local/bin"
+  curl -fsSL https://install.inkstead.app | sh
+  curl -fsSL https://install.inkstead.app | sh -s -- --dir "$HOME/.local/bin"
 
 Options:
   --dir DIR          Install directory. Defaults to /usr/local/bin.
