@@ -1,0 +1,34 @@
+--- a/ThirdParty/libjpeg-turbo/libjpeg-turbo/src/turbojpeg-mp.c
++++ b/ThirdParty/libjpeg-turbo/libjpeg-turbo/src/turbojpeg-mp.c
+@@ -345,6 +345,7 @@
+     if ((src = jinit_read_bmp(cinfo, FALSE)) == NULL)
+       THROW("Could not initialize bitmap loader");
+     invert = !this->bottomUp;
++#ifdef PNG_SUPPORTED
+   } else if (tempc == 0x89) {
+ #if BITS_IN_JSAMPLE == 8
+     if (this->precision >= 2 && this->precision <= BITS_IN_JSAMPLE)
+@@ -356,6 +357,7 @@
+     if ((src = _jinit_read_png(cinfo)) == NULL)
+       THROW("Could not initialize PNG loader");
+     invert = this->bottomUp;
++#endif
+   } else if (tempc == 'P') {
+ #if BITS_IN_JSAMPLE == 8
+     if (this->precision >= 2 && this->precision <= BITS_IN_JSAMPLE)
+@@ -547,6 +549,7 @@
+     dinfo->X_density = (UINT16)this->xDensity;
+     dinfo->Y_density = (UINT16)this->yDensity;
+     dinfo->density_unit = (UINT8)this->densityUnits;
++#ifdef PNG_SUPPORTED
+   } else if (ptr && !strcasecmp(ptr, ".png")) {
+ #if BITS_IN_JSAMPLE == 8
+     if (this->precision >= 2 && this->precision <= BITS_IN_JSAMPLE)
+@@ -569,6 +572,7 @@
+       (*dst->write_icc_profile) (dinfo, dst, iccBuf,
+                                  (unsigned int)this->decompICCSize);
+     }
++#endif
+   } else {
+ #if BITS_IN_JSAMPLE == 8
+     if (this->precision >= 2 && this->precision <= BITS_IN_JSAMPLE)

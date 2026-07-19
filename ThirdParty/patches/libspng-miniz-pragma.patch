@@ -1,0 +1,13 @@
+--- a/ThirdParty/libspng/libspng/spng/spng.c
++++ b/ThirdParty/libspng/libspng/spng/spng.c
+@@ -1209,8 +1209,10 @@
+     if(inflateValidate(&ctx->zstream, validate)) return SPNG_EZLIB_INIT;
+ 
+ #else /* This requires zlib >= 1.2.11 */
++#ifndef SPNG_USE_MINIZ
+     #pragma message ("inflateValidate() not available, SPNG_CTX_IGNORE_ADLER32 will be ignored")
+ #endif
++#endif
+ 
+     return 0;
+ }

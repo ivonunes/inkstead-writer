@@ -1,0 +1,14 @@
+--- a/ThirdParty/libwebp/libwebp/sharpyuv/sharpyuv_cpu.c
++++ b/ThirdParty/libwebp/libwebp/sharpyuv/sharpyuv_cpu.c
+@@ -11,4 +11,11 @@
+ 
+ // Include src/dsp/cpu.c to create SharpYuvGetCPUInfo from VP8GetCPUInfo. The
+ // function pointer is renamed in sharpyuv_cpu.h.
++#if defined(__clang__)
++#pragma clang diagnostic push
++#pragma clang diagnostic ignored "-Wambiguous-macro"
++#endif
+ #include "src/dsp/cpu.c"
++#if defined(__clang__)
++#pragma clang diagnostic pop
++#endif

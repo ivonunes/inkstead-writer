@@ -35,7 +35,7 @@ See [Themes](/start/themes/) for details.
 - `cache list` and `cache clean` — inspect or prune downloaded binaries. `cache clean --dry-run` previews.
 - `version` — print the Inkstead Writer version.
 
-See [Updating And Migrating](/extras/upgrading/) for how versions and migrations fit together.
+See [Upgrading](/upgrading/) for how versions and migrations fit together.
 
 ## Creating Sites
 

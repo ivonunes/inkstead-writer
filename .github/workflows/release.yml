@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - "v*.*.*"
+  # Dispatched at the tag ref by prepare-release.yml (a tag pushed with
+  # GITHUB_TOKEN can't trigger the push event above).
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -214,6 +217,9 @@ jobs:
       - macos
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
       - name: Download artifacts
         uses: actions/download-artifact@v8
         with:
@@ -226,7 +232,38 @@ jobs:
           sha256sum "inkstead-writer-${GITHUB_REF_NAME}" *.tar.gz > "inkstead-writer-${GITHUB_REF_NAME}-SHA256SUMS"
           sha256sum -c "inkstead-writer-${GITHUB_REF_NAME}-SHA256SUMS"
 
+      # The release description is the version's upgrade-notes page (with doc
+      # links rewritten to inkstead.app), followed by GitHub's generated
+      # changelog. Every release has a page (an additive one rolls into an
+      # automatic all-clear); the --generate-notes fallback only covers a tag
+      # cut outside the prepare-release workflow.
+      - name: Compose release notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PAGE="docs/upgrading/${VERSION}.md"
+          if [ -f "$PAGE" ]; then
+            {
+              echo "Upgrade guide: https://inkstead.app/writer/upgrading/${VERSION}/"
+              echo
+              # Doc links are site-absolute (the convention in docs/), so
+              # prefix them with the site origin and the /writer/ section.
+              awk 'NR==1 && /^# /{next} {print}' "$PAGE" \
+                | sed -E 's|\]\((/[A-Za-z0-9._/#-]*)\)|](https://inkstead.app/writer\1)|g'
+              echo
+              echo "---"
+              echo
+              gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" -f tag_name="$GITHUB_REF_NAME" --jq .body
+            } > release-notes.md
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
       - name: Create release
-        run: gh release create "$GITHUB_REF_NAME" "artifacts/inkstead-writer-${GITHUB_REF_NAME}" artifacts/*.tar.gz artifacts/*-SHA256SUMS --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+        run: |
+          if [ -f release-notes.md ]; then
+            gh release create "$GITHUB_REF_NAME" "artifacts/inkstead-writer-${GITHUB_REF_NAME}" artifacts/*.tar.gz artifacts/*-SHA256SUMS --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes-file release-notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" "artifacts/inkstead-writer-${GITHUB_REF_NAME}" artifacts/*.tar.gz artifacts/*-SHA256SUMS --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+          fi
         env:
           GH_TOKEN: ${{ github.token }}

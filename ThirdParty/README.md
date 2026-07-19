@@ -16,9 +16,18 @@ Local changes:
 - Package manifests are pruned to library targets used by Inkstead.
 - `libjpeg-turbo` is built as a local SwiftPM C target with generated
   non-SIMD configuration headers from the official source tarball.
+  `include/tjcompat.h` is a local shim so the Swift wrapper works across the
+  libjpeg-turbo 3.2 `tj3Init` macro change, and the PNG loader/saver added in
+  3.2 is disabled (it would pull a second copy of spng into the binary).
 - `libspng` is built as a local SwiftPM C target with `miniz` as its
   single-binary DEFLATE backend.
 - `libspng` suppresses the upstream `inflateValidate()` pragma for `miniz`
   builds because Inkstead does not use `SPNG_CTX_IGNORE_ADLER32`.
 - `libwebp` has a narrow Clang diagnostic suppression for an upstream
-  `sharpyuv` macro redefinition warning.
+  `sharpyuv` macro redefinition warning. Its `src/module.modulemap` is local
+  (from the packaging fork); updates track `webmproject/libwebp` directly.
+
+In-tree edits to upstream sources are recorded as patch files in
+`ThirdParty/patches/` and reapplied by `support/update-vendored.sh`, which
+checks all four upstreams and imports newer releases (the weekly
+update-vendored workflow runs it and raises the result as a PR).

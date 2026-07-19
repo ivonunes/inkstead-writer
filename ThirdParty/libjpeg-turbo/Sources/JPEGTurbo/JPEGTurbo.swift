@@ -112,7 +112,7 @@ public enum JPEGTurbo {
     }
 
     private static func withDecompressor<T>(_ body: (tjhandle) throws -> T) throws -> T {
-        guard let handle = tj3Init(cInt(TJINIT_DECOMPRESS.rawValue)) else {
+        guard let handle = tjInitCompat(cInt(TJINIT_DECOMPRESS.rawValue)) else {
             throw JPEGTurboError.initializationFailed(errorMessage(for: nil))
         }
         defer { tj3Destroy(handle) }
@@ -120,7 +120,7 @@ public enum JPEGTurbo {
     }
 
     private static func withCompressor<T>(_ body: (tjhandle) throws -> T) throws -> T {
-        guard let handle = tj3Init(cInt(TJINIT_COMPRESS.rawValue)) else {
+        guard let handle = tjInitCompat(cInt(TJINIT_COMPRESS.rawValue)) else {
             throw JPEGTurboError.initializationFailed(errorMessage(for: nil))
         }
         defer { tj3Destroy(handle) }
