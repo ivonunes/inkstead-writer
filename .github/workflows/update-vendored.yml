@@ -33,7 +33,7 @@ jobs:
       changed: ${{ steps.apply.outputs.changed }}
     steps:
       - name: Checkout main
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: main
 
@@ -68,12 +68,12 @@ jobs:
       image: swift:6.3
     steps:
       - name: Checkout main
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: main
 
       - name: Cache SwiftPM build
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .build
           key: linux-test-swiftpm-${{ hashFiles('Package.resolved', 'Package.swift') }}
@@ -93,7 +93,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout main
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: main
 

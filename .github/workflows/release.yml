@@ -23,10 +23,10 @@ jobs:
       image: swift:6.3
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Cache SwiftPM build
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .build
           key: linux-test-swiftpm-${{ hashFiles('Package.resolved', 'Package.swift') }}
@@ -41,7 +41,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # The runner's default Xcode Swift is older than the tools-version PlumeKit's
       # manifest declares (6.2), so install a matching toolchain from swift.org. It's
@@ -53,7 +53,7 @@ jobs:
           sudo installer -pkg /tmp/swift.pkg -target /
 
       - name: Cache SwiftPM build
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .build
           key: macos-test-swiftpm-${{ hashFiles('Package.resolved', 'Package.swift') }}
@@ -70,7 +70,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Smoke test launcher
         run: |
@@ -114,7 +114,7 @@ jobs:
             arch: aarch64
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Check tag matches Inkstead Writer version
         run: |
@@ -164,7 +164,7 @@ jobs:
             arch: x86_64
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Check tag matches Inkstead Writer version
         run: |

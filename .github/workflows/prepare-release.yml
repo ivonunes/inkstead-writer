@@ -10,6 +10,18 @@ name: Prepare release
 # The tag is created ON the release commit, so it is immutable and correct from
 # birth — release.yml refuses a tag that doesn't match currentVersion.
 # inkstead.app needs nothing per release: its build discovers upgrade-notes pages.
+#
+# Tests run in the Swift container; the git work runs in a separate job on the
+# plain runner, because checkout inside a container can fall back to a REST
+# download that leaves no .git to commit in. The tag job refuses to proceed if
+# main moved while the tests ran.
+#
+# The push authenticates with the RELEASE_DEPLOY_KEY secret (a deploy key in
+# the main ruleset's bypass list — the GitHub Actions app can't bypass rules
+# on a user-owned repo). The secret lives in the `release` environment, whose
+# branch policy restricts it to runs on main. Deploy-key pushes are not
+# GITHUB_TOKEN events, so the tag push triggers the Release workflow directly;
+# no dispatch is needed.
 
 on:
   workflow_dispatch:
@@ -19,35 +31,32 @@ on:
         required: true
 
 permissions:
-  contents: write
-  actions: write
+  contents: read
 
 concurrency:
   group: prepare-release
   cancel-in-progress: false
 
 jobs:
-  prepare:
-    name: Test, bump, tag
+  test:
+    name: Test main
     runs-on: ubuntu-latest
     container:
       image: swift:6.3
+    outputs:
+      sha: ${{ steps.checkout.outputs.commit }}
     steps:
       - name: Checkout main
-        uses: actions/checkout@v6
+        id: checkout
+        uses: actions/checkout@v7
         with:
           ref: main
 
       - name: Validate version
-        run: |
-          echo "${{ inputs.version }}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'
-          if git ls-remote --tags origin "refs/tags/v${{ inputs.version }}" | grep -q .; then
-            echo "Tag v${{ inputs.version }} already exists"
-            exit 1
-          fi
+        run: echo "${{ inputs.version }}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'
 
       - name: Cache SwiftPM build
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .build
           key: linux-test-swiftpm-${{ hashFiles('Package.resolved', 'Package.swift') }}
@@ -57,6 +66,30 @@ jobs:
       # The tag must never point at a broken tree; test.yml only runs on PRs.
       - name: Test
         run: swift test
+
+  tag:
+    name: Bump, tag and push
+    needs: test
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
+
+      - name: Refuse stale or duplicate releases
+        run: |
+          if [ "$(git rev-parse HEAD)" != "${{ needs.test.outputs.sha }}" ]; then
+            echo "main moved while the tests ran — rerun the workflow"
+            exit 1
+          fi
+          EXISTING="$(git ls-remote --tags origin "refs/tags/v${{ inputs.version }}")"
+          if [ -n "$EXISTING" ]; then
+            echo "Tag v${{ inputs.version }} already exists"
+            exit 1
+          fi
 
       - name: Apply release edits
         run: support/prepare-release.sh "${{ inputs.version }}"
@@ -68,13 +101,8 @@ jobs:
           git add -A
           git commit -m "Release ${{ inputs.version }}"
           git tag -a "v${{ inputs.version }}" -m "Inkstead Writer ${{ inputs.version }}"
-          git push origin main "v${{ inputs.version }}"
-
-      # A tag pushed with GITHUB_TOKEN doesn't fire tag-triggered workflows
-      # (GitHub's recursion guard), so start the Release build explicitly at
-      # the new tag — its jobs see the tag as their ref, exactly as if the
-      # push had triggered them.
-      - name: Dispatch the Release workflow
-        run: gh workflow run release.yml --ref "v${{ inputs.version }}"
-        env:
-          GH_TOKEN: ${{ github.token }}
+          # main first, tag second: if the branch push is rejected (rules,
+          # races), no tag is left behind pointing at an unreachable commit.
+          # The tag push fires the Release workflow's tag trigger.
+          git push origin main
+          git push origin "v${{ inputs.version }}"
