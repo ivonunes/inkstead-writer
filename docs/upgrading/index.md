@@ -59,3 +59,4 @@ The cache defaults to `~/Library/Caches/inkstead-writer` on macOS and `${XDG_CAC
 ## Versions
 
 <!-- newest-first: prepare-release.sh inserts each release's line below -->
+- [Inkstead Writer 2.2.1](/upgrading/2.2.1/)
