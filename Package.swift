@@ -12,7 +12,7 @@ let package = Package(
         .executable(name: "inkstead-writer", targets: ["InksteadWriterCLI"])
     ],
     dependencies: [
-        .package(url: "https://github.com/ivonunes/plumekit.git", from: "2.0.0"),
+        .package(url: "https://github.com/ivonunes/plumekit.git", from: "3.0.0"),
         .package(url: "https://github.com/apple/swift-cmark.git", from: "0.8.0"),
         .package(path: "ThirdParty/libjpeg-turbo"),
         .package(path: "ThirdParty/libspng"),

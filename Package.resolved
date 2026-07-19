@@ -1,13 +1,13 @@
 {
-  "originHash" : "9b758184419d5cd0b4a1269123c2d2e8e9e0aa12fe8415549372089d265f43c8",
+  "originHash" : "656c7812c3fc05fc7162a1bdf77fb8ebbd9e7cffa77465dca97933baf2f52192",
   "pins" : [
     {
       "identity" : "plumekit",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ivonunes/plumekit.git",
       "state" : {
-        "revision" : "472f5dc27c5719bb3098732ccaa48fea2eff5666",
-        "version" : "2.1.1"
+        "revision" : "43655b0ed9efe8225c89603a51f742d068f02562",
+        "version" : "3.0.0"
       }
     },
     {
@@ -51,8 +51,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-crypto.git",
       "state" : {
-        "revision" : "95ba0316a9b733e92bb6b071255ff46263bbe7dc",
-        "version" : "3.15.1"
+        "revision" : "47d3869a7291f085c1fb9fb1e6d3b97a793f45c6",
+        "version" : "4.5.1"
       }
     },
     {
