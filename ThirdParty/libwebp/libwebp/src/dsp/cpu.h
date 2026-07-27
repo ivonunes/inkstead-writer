@@ -56,6 +56,11 @@
     (defined(_M_X64) || defined(_M_IX86))
 #define WEBP_MSC_SSE41  // Visual C++ SSE4.1 targets
 #endif
+
+#if defined(_MSC_VER) && _MSC_VER >= 1700 && \
+    (defined(_M_X64) || defined(_M_IX86))
+#define WEBP_MSC_AVX2  // Visual C++ AVX2 targets
+#endif
 #endif
 
 // WEBP_HAVE_* are used to indicate the presence of the instruction set in dsp
@@ -80,21 +85,16 @@
 #define WEBP_HAVE_SSE41
 #endif
 
-/*
- * WEBP_TARGET_ATTRIBUTE(attrs) - override the compilation target for a function.
- *
- * This accepts one or more comma-separated suffixes to the -m prefix jointly
- * forming the name of a machine-dependent option.  On gcc-like compilers, this
- * enables codegen for the given targets, including arbitrary compiler-generated
- * code as well as the corresponding intrinsics.  On other compilers this macro
- * expands to nothing, though MSVC allows intrinsics to be used anywhere anyway.
- */
-#if defined(__GNUC__) || __has_attribute(target)
-#  define WEBP_TARGET_ATTRIBUTE(attrs)	__attribute__((target(attrs)))
-#else
-#  define WEBP_TARGET_ATTRIBUTE(attrs)
+#if (defined(__AVX2__) || defined(WEBP_MSC_AVX2)) && \
+    (!defined(HAVE_CONFIG_H) || defined(WEBP_HAVE_AVX2))
+#define WEBP_USE_AVX2
 #endif
 
+#if defined(WEBP_USE_AVX2) && !defined(WEBP_HAVE_AVX2)
+#define WEBP_HAVE_AVX2
+#endif
+
+#undef WEBP_MSC_AVX2
 #undef WEBP_MSC_SSE41
 #undef WEBP_MSC_SSE2
 
