@@ -35,7 +35,7 @@ extern "C" {
 // Pack the planar buffers
 // rrrr... rrrr... gggg... gggg... bbbb... bbbb....
 // triplet by triplet in the output buffer rgb as rgbrgbrgbrgb ...
-static WEBP_INLINE WEBP_TARGET_ATTRIBUTE("ssse3") void VP8PlanarTo24b_SSE41(
+static WEBP_INLINE void VP8PlanarTo24b_SSE41(
     __m128i* const in0, __m128i* const in1, __m128i* const in2,
     __m128i* const in3, __m128i* const in4, __m128i* const in5) {
   __m128i R0, R1, R2, R3, R4, R5;
@@ -98,10 +98,10 @@ static WEBP_INLINE WEBP_TARGET_ATTRIBUTE("ssse3") void VP8PlanarTo24b_SSE41(
 
 // Convert four packed four-channel buffers like argbargbargbargb... into the
 // split channels aaaaa ... rrrr ... gggg .... bbbbb ......
-static WEBP_INLINE WEBP_TARGET_ATTRIBUTE("ssse3") void VP8L32bToPlanar_SSE41(__m128i* const in0,
-                                                                             __m128i* const in1,
-                                                                             __m128i* const in2,
-                                                                             __m128i* const in3) {
+static WEBP_INLINE void VP8L32bToPlanar_SSE41(__m128i* const in0,
+                                              __m128i* const in1,
+                                              __m128i* const in2,
+                                              __m128i* const in3) {
   // aaaarrrrggggbbbb
   const __m128i shuff0 =
       _mm_set_epi8(15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0);

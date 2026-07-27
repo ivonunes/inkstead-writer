@@ -25,7 +25,7 @@ public struct JPEGTurboImage {
 }
 
 public enum JPEGTurbo {
-    public static let version = "3.1.4.1"
+    public static let version = "3.2.0"
 
     public static func dimensions(of data: [UInt8]) throws -> (width: Int, height: Int) {
         try withDecompressor { handle in
