@@ -10,7 +10,7 @@ public struct PublicAppConnectionConfig: Codable, Equatable {
     public var instanceUrl: String?
     public var postsPath: String
     public var mediaPath: String
-    public var syndicationProviders: [SyndicationProviderName]
+    public var syndicationProviders: [SyndicationTarget]
     public var categories: [String]
 }
 

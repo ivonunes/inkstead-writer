@@ -12,7 +12,9 @@ The site-level configuration lists the enabled providers:
 }
 ```
 
-Provider names are `mastodon`, `bluesky`, `pixelfed`, and `flickr`. Enabled providers are offered as defaults when you create posts and are checked by `doctor` and `requirements`.
+Provider names are `mastodon`, `bluesky`, `pixelfed`, `flickr`, and `buffer`. Enabled providers are offered as defaults when you create posts and are checked by `doctor` and `requirements`.
+
+Buffer reaches several networks from one account, so its targets name the network too, as `buffer:x` or `buffer:linkedin`. See the [Buffer guide](/syndication/buffer/).
 
 Each post still opts in individually. Add `syndicate` to a post:
 
@@ -50,6 +52,7 @@ syndication:
 Provider guides:
 
 - [Bluesky](/syndication/bluesky/)
+- [Buffer](/syndication/buffer/)
 - [Mastodon](/syndication/mastodon/)
 - [Pixelfed](/syndication/pixelfed/)
 - [Flickr](/syndication/flickr/)

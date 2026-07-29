@@ -48,11 +48,34 @@ public enum AdapterSupport {
         case .bluesky: "Bluesky"
         case .flickr: "Flickr"
         case .pixelfed: "Pixelfed"
+        case .buffer: "Buffer"
+        }
+    }
+
+    /// A target's name for people: the network it reaches, with the account when
+    /// one is named. Buffer is the transport rather than the destination, so it
+    /// only appears when it is the whole target.
+    public static func syndicationName(_ target: SyndicationTarget) -> String {
+        guard let service = target.service else { return syndicationName(target.provider) }
+        let name = serviceName(service)
+        guard let account = target.account else { return name }
+        return "\(name) \(account)"
+    }
+
+    static func serviceName(_ service: String) -> String {
+        switch BufferChannels.token(forService: service) {
+        case "x": "X"
+        case "linkedin": "LinkedIn"
+        case "threads": "Threads"
+        case "facebook": "Facebook"
+        case "instagram": "Instagram"
+        case "pinterest": "Pinterest"
+        case let other: other.prefix(1).uppercased() + other.dropFirst()
         }
     }
 
     public static func requirements(for config: InksteadWriterConfig) -> [AdapterRequirement] {
-        let syndication = (config.syndication?.providers ?? []).flatMap(syndicationRequirements)
+        let syndication = (config.syndication?.providers ?? []).map(\.provider).flatMap(syndicationRequirements)
         var seen = Set<String>()
         return (deployRequirements(for: config) + syndication).filter { seen.insert($0.environmentVariable).inserted }
     }
@@ -97,6 +120,10 @@ public enum AdapterSupport {
             return [
                 AdapterRequirement(environmentVariable: "PIXELFED_INSTANCE_URL", description: "Pixelfed instance URL."),
                 AdapterRequirement(environmentVariable: "PIXELFED_ACCESS_TOKEN", description: "Pixelfed access token.")
+            ]
+        case .buffer:
+            return [
+                AdapterRequirement(environmentVariable: "BUFFER_API_KEY", description: "Buffer API key.")
             ]
         }
     }

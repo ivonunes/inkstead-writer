@@ -22,7 +22,7 @@ public struct NormalizedPost: Equatable, @unchecked Sendable {
     public var firstImage: String?
     public var alt: String?
     public var categories: [String]
-    public var syndicate: [SyndicationProviderName]
+    public var syndicate: [SyndicationTarget]
     public var syndication: [String: FrontmatterValue]
     public var syndicationUrls: [String]
     public var previous: String?
@@ -162,7 +162,7 @@ public enum ContentLoader {
             firstImage: bodyImages.first ?? frontmatterPhotos.first,
             alt: parsed.frontmatter["alt"]?.string,
             categories: categories,
-            syndicate: (parsed.frontmatter["syndicate"]?.stringArray ?? []).compactMap(SyndicationProviderName.init(rawValue:)),
+            syndicate: (parsed.frontmatter["syndicate"]?.stringArray ?? []).compactMap(SyndicationTarget.init(rawValue:)),
             syndication: syndication,
             syndicationUrls: syndicationUrls(parsed.frontmatter["syndication"]),
             previous: nil,

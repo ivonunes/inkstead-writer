@@ -301,17 +301,105 @@ public struct DeployConfig: Codable, Equatable {
     public var projectName: String?
 }
 
-public enum SyndicationProviderName: String, Codable, Equatable, CaseIterable {
+public enum SyndicationProviderName: String, Codable, Equatable, CaseIterable, Sendable {
     case mastodon
     case bluesky
     case flickr
     case pixelfed
+    case buffer
+}
+
+/// One syndication destination, written as `provider`, `provider:service`, or
+/// `provider:service@account`.
+///
+/// Direct providers own a single account, so their token is just the provider
+/// name. Buffer fronts several networks at once, so its tokens name the service
+/// (`buffer:x`) and, when one Buffer organisation holds more than one account on
+/// the same service, the account too (`buffer:x@ivonunes`).
+///
+/// The separators are chosen so every part is safe as a frontmatter key: `:`
+/// cannot appear in one (the parser splits keys on the first colon), which is why
+/// a Buffer result is recorded nested under `buffer` rather than under the whole
+/// token.
+public struct SyndicationTarget: Codable, Equatable, Hashable, Sendable {
+    public var provider: SyndicationProviderName
+    /// The network within a fronting provider, in Inkstead's own naming (`x`,
+    /// not the vendor's `twitter`). Nil for direct providers.
+    public var service: String?
+    /// Distinguishes accounts when one provider holds several on one service.
+    public var account: String?
+
+    public init(provider: SyndicationProviderName, service: String? = nil, account: String? = nil) {
+        self.provider = provider
+        let trimmedService = service?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedAccount = account?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.service = (trimmedService?.isEmpty == false) ? trimmedService?.lowercased() : nil
+        self.account = (trimmedAccount?.isEmpty == false) ? trimmedAccount : nil
+    }
+
+    public init?(rawValue: String) {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let parts = trimmed.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+        guard let provider = SyndicationProviderName(rawValue: String(parts[0]).lowercased()) else { return nil }
+        guard parts.count == 2 else {
+            self.init(provider: provider)
+            return
+        }
+        let remainder = String(parts[1])
+        guard !remainder.isEmpty else { return nil }
+        let serviceAndAccount = remainder.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false)
+        let service = String(serviceAndAccount[0])
+        guard !service.isEmpty else { return nil }
+        let account = serviceAndAccount.count == 2 ? String(serviceAndAccount[1]) : nil
+        guard account?.isEmpty != true else { return nil }
+        self.init(provider: provider, service: service, account: account)
+    }
+
+    public var rawValue: String {
+        guard let service else { return provider.rawValue }
+        guard let account else { return "\(provider.rawValue):\(service)" }
+        return "\(provider.rawValue):\(service)@\(account)"
+    }
+
+    /// The key a result is recorded under inside the provider's frontmatter
+    /// block. Nil for direct providers, whose result sits directly under the
+    /// provider name.
+    public var resultKey: String? {
+        guard let service else { return nil }
+        guard let account else { return service }
+        return "\(service)@\(account)"
+    }
+
+    public static let mastodon = SyndicationTarget(provider: .mastodon)
+    public static let bluesky = SyndicationTarget(provider: .bluesky)
+    public static let flickr = SyndicationTarget(provider: .flickr)
+    public static let pixelfed = SyndicationTarget(provider: .pixelfed)
+
+    public static func buffer(_ service: String, account: String? = nil) -> SyndicationTarget {
+        SyndicationTarget(provider: .buffer, service: service, account: account)
+    }
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        guard let target = SyndicationTarget(rawValue: raw) else {
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Unrecognised syndication target \(raw).")
+            )
+        }
+        self = target
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
 public struct SyndicationConfig: Codable, Equatable {
-    public var providers: [SyndicationProviderName]
+    public var providers: [SyndicationTarget]
 
-    public init(providers: [SyndicationProviderName]) {
+    public init(providers: [SyndicationTarget]) {
         self.providers = providers
     }
 
@@ -324,7 +412,7 @@ public struct SyndicationConfig: Codable, Equatable {
         let names = try container.decodeIfPresent([String].self, forKey: .providers) ?? []
         // Unknown names are dropped rather than failing the whole config, so
         // sites configured for a provider that no longer exists keep loading.
-        providers = names.compactMap(SyndicationProviderName.init(rawValue:))
+        providers = names.compactMap(SyndicationTarget.init(rawValue:))
     }
 }
 

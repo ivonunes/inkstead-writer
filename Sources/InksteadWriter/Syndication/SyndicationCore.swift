@@ -69,13 +69,103 @@ public enum SyndicationText {
         }
         return markdownToText(post.parsed.body)
     }
+
+    /// The post itself rather than a headline pointing at it, with the title and
+    /// link last.
+    ///
+    /// Long-form services are read in place, so a title and a URL alone would be
+    /// a link someone has to leave for. The body leads instead, and the title
+    /// goes at the end to say what the link opens. Nothing else is added: no
+    /// "read more" line, because the post is the writer's, in the writer's
+    /// language, and boilerplate of ours would be neither.
+    public static func longFormText(for post: NormalizedPost, limit: Int?) -> String {
+        let body = markdownToText(post.parsed.body).trimmingCharacters(in: .whitespacesAndNewlines)
+        let tail = longFormTail(for: post)
+        let separator = "\n\n"
+        guard let limit else { return "\(body)\(separator)\(tail)" }
+        let available = limit - tail.count - separator.count
+        guard available > 1 else { return String(tail.prefix(limit)) }
+        guard body.count > available else { return "\(body)\(separator)\(tail)" }
+        return "\(trimmedBody(body, to: available))\(separator)\(tail)"
+    }
+
+    /// Cuts a body to fit, ending where the writing ends a thought.
+    ///
+    /// LinkedIn rejects anything past its limit outright, so a long post has to
+    /// be cut somewhere. Cutting on a character boundary severs a word mid-way
+    /// and reads like a bug, so a paragraph break is preferred, then a word
+    /// boundary, and only then the raw count.
+    static func trimmedBody(_ body: String, to available: Int) -> String {
+        guard body.count > available else { return body }
+        let room = available - 1
+        guard room > 0 else { return "…" }
+        let head = String(body.prefix(room))
+
+        // Only take a paragraph break that still leaves a worthwhile excerpt;
+        // an early one would throw away most of the allowance.
+        if let paragraph = head.range(of: "\n\n", options: .backwards),
+           head.distance(from: head.startIndex, to: paragraph.lowerBound) >= room / 2 {
+            return "\(head[..<paragraph.lowerBound])…"
+        }
+        if let space = head.lastIndex(where: { $0.isWhitespace }),
+           head.distance(from: head.startIndex, to: space) >= room / 2 {
+            let trimmed = head[..<space].reversed().drop { $0.isWhitespace || $0 == "," }.reversed()
+            return "\(String(trimmed))…"
+        }
+        return "\(head)…"
+    }
+
+    static func longFormTail(for post: NormalizedPost) -> String {
+        guard let title = post.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else {
+            return post.canonicalUrl
+        }
+        // A title that already closes itself does not want a colon after it.
+        let closing: Set<Character> = [".", "!", "?", ":", "…"]
+        let joiner = closing.contains(title.last ?? " ") ? " " : ": "
+        return "\(title)\(joiner)\(post.canonicalUrl)"
+    }
+
+    /// Trims a headline-and-link post to a service's limit, keeping the link.
+    public static func text(for post: NormalizedPost, limit: Int?) -> String {
+        let text = self.text(for: post)
+        guard let limit, text.count > limit else { return text }
+        if let newlineIndex = text.lastIndex(of: "\n") {
+            let url = String(text[text.index(after: newlineIndex)...])
+            if url.hasPrefix("http"), url.count + 2 <= limit {
+                let head = text[..<newlineIndex]
+                return "\(head.prefix(limit - url.count - 2))…\n\(url)"
+            }
+        }
+        return String(text.prefix(limit))
+    }
 }
 
 public enum SyndicationFrontmatter {
-    public static func update(markdown: String, provider: SyndicationProviderName, result: SyndicationResult) -> String {
+    /// The recorded result for a target, or nil when it has not been attempted.
+    ///
+    /// A direct provider's result sits under the provider name. A target that
+    /// names a service is recorded one level deeper, under the provider, because
+    /// the frontmatter parser splits mapping keys on their first colon and could
+    /// not read `buffer:x` back.
+    public static func result(
+        in syndication: [String: FrontmatterValue]?,
+        for target: SyndicationTarget
+    ) -> [String: FrontmatterValue]? {
+        guard let entry = syndication?[target.provider.rawValue]?.object else { return nil }
+        guard let key = target.resultKey else { return entry }
+        return entry[key]?.object
+    }
+
+    public static func update(markdown: String, target: SyndicationTarget, result: SyndicationResult) -> String {
         let parsed = FrontmatterParser.parse(markdown)
         var syndication = parsed.frontmatter["syndication"]?.object ?? [:]
-        syndication[provider.rawValue] = .object(result.frontmatterObject())
+        if let key = target.resultKey {
+            var provider = syndication[target.provider.rawValue]?.object ?? [:]
+            provider[key] = .object(result.frontmatterObject())
+            syndication[target.provider.rawValue] = .object(provider)
+        } else {
+            syndication[target.provider.rawValue] = .object(result.frontmatterObject())
+        }
         let block = FrontmatterParser.serializeYamlSubset(["syndication": .object(syndication)])
         guard let yamlRange = frontmatterRange(of: markdown) else {
             return "---\n\(block)\n---\n\n\(markdown)"

@@ -31,18 +31,27 @@ public struct SyndicationContext {
 }
 
 public enum SyndicationProviders {
-    public static func canSyndicate(_ provider: SyndicationProviderName, post: NormalizedPost) -> Bool {
-        switch provider {
+    public static func canSyndicate(_ target: SyndicationTarget, post: NormalizedPost) -> Bool {
+        switch target.provider {
         case .mastodon, .bluesky:
-            true
+            return true
         case .flickr, .pixelfed:
-            post.kind == .photoNote
+            return post.kind == .photoNote
+        case .buffer:
+            guard let service = target.service else { return false }
+            // Instagram and Pinterest carry the photo rather than a link, so a
+            // post with no image has nothing to send them.
+            if BufferChannels.requiresPhoto(service: service) { return post.kind == .photoNote }
+            // Long-form services take articles. An untitled note is an aside,
+            // and sending it there would be posting to the wrong room.
+            if BufferChannels.isLongForm(service: service) { return post.title?.isEmpty == false }
+            return true
         }
     }
 
-    public static func publish(_ provider: SyndicationProviderName, post: NormalizedPost, context: SyndicationContext) async -> SyndicationResult {
+    public static func publish(_ target: SyndicationTarget, post: NormalizedPost, context: SyndicationContext) async -> SyndicationResult {
         do {
-            switch provider {
+            switch target.provider {
             case .mastodon:
                 return try await publishMastodon(post: post, context: context)
             case .bluesky:
@@ -51,6 +60,8 @@ public enum SyndicationProviders {
                 return try await publishFlickr(post: post, context: context)
             case .pixelfed:
                 return try await publishPixelfed(post: post, context: context)
+            case .buffer:
+                return try await publishBuffer(target: target, post: post, context: context)
             }
         } catch {
             return .failed(error is InksteadWriterError ? String(describing: error) : error.localizedDescription)
@@ -301,6 +312,10 @@ public enum SyndicationProviders {
         ]
         let text = SyndicationText.markdownToText(post.parsed.body)
         var params = oauth
+        // Deliberately an empty string rather than an omitted parameter: Flickr
+        // substitutes the filename when a photo arrives with no title, so
+        // leaving it out would title an untitled note "photo.jpg". An explicit
+        // empty title is what actually leaves it untitled.
         params["title"] = post.title ?? ""
         params["description"] = text
         params["oauth_signature"] = oauthSignature(method: "POST", url: uploadURL, params: params, apiSecret: apiSecret, accessSecret: accessSecret)
@@ -325,6 +340,140 @@ public enum SyndicationProviders {
             "url": id.map { "https://www.flickr.com/photo.gne?id=\($0)" },
             "publishedAt": ISO8601DateFormatter().string(from: context.now())
         ].compactMapValues { $0 })
+    }
+
+    /// Publishes through Buffer, which fronts several networks behind one key.
+    ///
+    /// The token names a service rather than a channel id, so the channel is
+    /// resolved here, at publish time, from the key itself. Nothing in the repo
+    /// ever holds a Buffer id, which is what lets a site that was configured by
+    /// hand, or restored onto a new machine, keep syndicating.
+    private static func publishBuffer(target: SyndicationTarget, post: NormalizedPost, context: SyndicationContext) async throws -> SyndicationResult {
+        guard let service = target.service else {
+            return .failed("Buffer syndication needs a channel, for example buffer:x.")
+        }
+        guard let key = context.env["BUFFER_API_KEY"], !key.isEmpty else {
+            return .failed("Missing Buffer credentials.")
+        }
+
+        let organizations = try await bufferQuery(
+            "query { account { organizations { id } } }",
+            key: key,
+            context: context
+        )
+        let organizationIDs = ((organizations["account"] as? [String: Any])?["organizations"] as? [[String: Any]] ?? [])
+            .compactMap { $0["id"] as? String }
+        guard !organizationIDs.isEmpty else {
+            return .failed("Buffer did not return an organisation for this key.")
+        }
+
+        var candidates: [[String: Any]] = []
+        for organizationID in organizationIDs {
+            let response = try await bufferQuery(
+                "query($organizationId: String!) { channels(input: { organizationId: $organizationId }) { id name service } }",
+                variables: ["organizationId": organizationID],
+                key: key,
+                context: context
+            )
+            candidates.append(contentsOf: response["channels"] as? [[String: Any]] ?? [])
+        }
+
+        let matches = candidates.filter { channel in
+            guard let channelService = channel["service"] as? String,
+                  BufferChannels.matches(token: service, service: channelService) else { return false }
+            guard let account = target.account else { return true }
+            return (channel["name"] as? String)?.caseInsensitiveCompare(account) == .orderedSame
+        }
+        // Never fall back to another channel on the same service: posting to a
+        // second account someone also manages is worse than not posting.
+        guard !matches.isEmpty else {
+            return .failed("Buffer has no \(target.rawValue) channel connected to this key.")
+        }
+
+        var published: [String] = []
+        for channel in matches {
+            guard let channelID = channel["id"] as? String else { continue }
+            var input: [String: Any] = [
+                "text": bufferText(for: post, service: service),
+                "channelId": channelID,
+                // Publish outright rather than letting Buffer fall back to
+                // pushing a reminder to a phone, which would turn publishing
+                // into a chore nobody was told about. A channel that cannot
+                // publish automatically fails here instead, and says so.
+                "schedulingType": "automaticPublishing",
+                "mode": "shareNow"
+            ]
+            // A photo note is its picture, so the picture goes with it. A titled
+            // article is not: its link carries the site's own preview image, and
+            // attaching a copy would show the same picture twice in one post.
+            if post.kind == .photoNote || BufferChannels.requiresPhoto(service: service) {
+                guard let imageURL = bufferImageURL(for: post) else {
+                    return .failed("\(target.rawValue) needs an image and this post has none.")
+                }
+                var image: [String: Any] = ["url": imageURL]
+                if let alt = post.alt, !alt.isEmpty {
+                    image["metadata"] = ["altText": alt]
+                }
+                input["assets"] = [["image": image]]
+            }
+            let response = try await bufferQuery(
+                "mutation($input: CreatePostInput!) { createPost(input: $input) { post { id } } }",
+                variables: ["input": input],
+                key: key,
+                context: context
+            )
+            guard let id = ((response["createPost"] as? [String: Any])?["post"] as? [String: Any])?["id"] as? String else {
+                return .failed("Buffer did not return a post id for \(target.rawValue).")
+            }
+            published.append(id)
+        }
+
+        return SyndicationResult(status: .published, fields: [
+            "id": published.joined(separator: ","),
+            "publishedAt": ISO8601DateFormatter().string(from: context.now())
+        ])
+    }
+
+    static func bufferText(for post: NormalizedPost, service: String) -> String {
+        let limit = BufferChannels.characterLimit(service: service)
+        guard BufferChannels.isLongForm(service: service) else {
+            return SyndicationText.text(for: post, limit: limit)
+        }
+        return SyndicationText.longFormText(for: post, limit: limit)
+    }
+
+    /// Buffer attaches media by public URL rather than upload, and syndication
+    /// runs after the deploy step, so the post's own image is already live.
+    static func bufferImageURL(for post: NormalizedPost) -> String? {
+        guard let reference = post.firstImage, !reference.isEmpty else { return nil }
+        guard let base = URL(string: post.canonicalUrl) else { return nil }
+        return URL(string: reference, relativeTo: base)?.absoluteURL.absoluteString
+    }
+
+    private static func bufferQuery(
+        _ query: String,
+        variables: [String: Any]? = nil,
+        key: String,
+        context: SyndicationContext
+    ) async throws -> [String: Any] {
+        var body: [String: Any] = ["query": query]
+        if let variables { body["variables"] = variables }
+        var request = URLRequest(url: URL(string: "https://api.buffer.com")!)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let response = try await context.http(request)
+        guard (200..<300).contains(response.statusCode) else {
+            throw InksteadWriterError.io("Buffer returned \(response.statusCode)\(errorDetail(in: response.body)).")
+        }
+        let json = (try? JSONSerialization.jsonObject(with: response.body)) as? [String: Any] ?? [:]
+        // GraphQL reports failures in an errors array with a 200 status.
+        if let errors = json["errors"] as? [[String: Any]], !errors.isEmpty {
+            let messages = errors.compactMap { $0["message"] as? String }.joined(separator: " — ")
+            throw InksteadWriterError.io("Buffer returned an error\(messages.isEmpty ? "" : ": \(messages)").")
+        }
+        return json["data"] as? [String: Any] ?? [:]
     }
 
     private static func jsonRequest(url: String, method: String, body: [String: Any], headers: [String: String], context: SyndicationContext) async throws -> [String: Any] {

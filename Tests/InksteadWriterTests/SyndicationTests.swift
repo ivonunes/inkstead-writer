@@ -41,7 +41,7 @@ final class SyndicationTests: XCTestCase {
 
     func testUpdatesOnlySyndicationFrontmatterAndPreservesBody() {
         let original = "---\ndate: 2026-05-10T18:30:00+01:00\nsyndicate:\n  - mastodon\n---\n\nBody **must** stay.\n\n"
-        let updated = SyndicationFrontmatter.update(markdown: original, provider: .mastodon, result: SyndicationResult(status: .published, fields: ["url": "https://example.com/1"]))
+        let updated = SyndicationFrontmatter.update(markdown: original, target: .mastodon, result: SyndicationResult(status: .published, fields: ["url": "https://example.com/1"]))
 
         XCTAssertTrue(updated.contains("syndication:"))
         XCTAssertTrue(updated.contains("mastodon:"))
@@ -469,7 +469,7 @@ final class SyndicationTests: XCTestCase {
         ```
         """
         let original = "\(head)\n\(tail)\n"
-        let updated = SyndicationFrontmatter.update(markdown: original, provider: .mastodon, result: SyndicationResult(status: .published, fields: ["url": "https://example.com/1"]))
+        let updated = SyndicationFrontmatter.update(markdown: original, target: .mastodon, result: SyndicationResult(status: .published, fields: ["url": "https://example.com/1"]))
 
         XCTAssertTrue(updated.hasPrefix("\(head)\n"))
         XCTAssertTrue(updated.hasSuffix("\n\(tail)\n"))
@@ -496,7 +496,7 @@ final class SyndicationTests: XCTestCase {
 
         Body stays.
         """
-        let updated = SyndicationFrontmatter.update(markdown: original, provider: .mastodon, result: SyndicationResult(status: .published, fields: ["url": "https://example.com/1"]))
+        let updated = SyndicationFrontmatter.update(markdown: original, target: .mastodon, result: SyndicationResult(status: .published, fields: ["url": "https://example.com/1"]))
 
         XCTAssertEqual(updated, """
         ---

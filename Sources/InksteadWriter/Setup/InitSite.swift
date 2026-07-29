@@ -207,7 +207,7 @@ public enum SiteInitializer {
             config.deploy = DeployConfig(provider: deploy, projectName: deploy == .cloudflareWorkers ? (options.deployProjectName ?? projectName) : nil)
         }
         if !options.syndication.isEmpty {
-            config.syndication = SyndicationConfig(providers: options.syndication)
+            config.syndication = SyndicationConfig(providers: options.syndication.map { SyndicationTarget(provider: $0) })
         }
         return config
     }
@@ -218,7 +218,7 @@ public enum SiteInitializer {
             SiteWrapper.path: SiteWrapper.script,
             ".env.example": environmentVariables(config).map { "\($0)=" }.joined(separator: "\n") + "\n",
             ".gitignore": "dist/\n.env\n.env.*\n!.env.example\n.DS_Store\n.site/\n",
-            "README.md": "# My Inkstead Writer Site\n\nDocumentation: https://inkstead.dev/\n",
+            "README.md": "# My Inkstead Writer Site\n\nDocumentation: https://inkstead.app/writer\n",
             "content/posts/hello.md": "\(postFrontmatter(base: ["date": "2026-05-10T18:30:00+01:00"], syndication: options.syndication))\n\nThinking about notes...\n",
             "content/posts/first-article.md": "\(postFrontmatter(base: ["title": "\"Why I Still Want a Personal Website\"", "date": "2026-05-10T18:30:00+01:00"], syndication: options.syndication))\n\nLonger article content here.\n",
             "content/pages/about.md": "---\ntitle: About\n---\n\nThis is my website.\n",
@@ -256,8 +256,8 @@ public enum SiteInitializer {
         if config.deploy?.provider == .netlify {
             names.append(contentsOf: ["NETLIFY_SITE_ID", "NETLIFY_AUTH_TOKEN"])
         }
-        for provider in config.syndication?.providers ?? [] {
-            switch provider {
+        for target in config.syndication?.providers ?? [] {
+            switch target.provider {
             case .mastodon:
                 names.append(contentsOf: ["MASTODON_INSTANCE_URL", "MASTODON_ACCESS_TOKEN"])
             case .bluesky:
@@ -266,6 +266,8 @@ public enum SiteInitializer {
                 names.append(contentsOf: ["FLICKR_API_KEY", "FLICKR_API_SECRET", "FLICKR_ACCESS_TOKEN", "FLICKR_ACCESS_SECRET"])
             case .pixelfed:
                 names.append(contentsOf: ["PIXELFED_INSTANCE_URL", "PIXELFED_ACCESS_TOKEN"])
+            case .buffer:
+                names.append("BUFFER_API_KEY")
             }
         }
         return Array(Set(names)).sorted()

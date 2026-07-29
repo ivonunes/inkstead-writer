@@ -2,7 +2,7 @@
   <footer class="site-footer">
     <p>&copy; {now.year} {site.author}</p>
     @if config.theme.showPoweredBy != false {
-    <p class="site-footer-credit">Powered by <a href="https://inkstead.dev" target="_blank" rel="noopener noreferrer">Inkstead Writer</a></p>
+    <p class="site-footer-credit">Powered by <a href="https://inkstead.app/writer" target="_blank" rel="noopener noreferrer">Inkstead Writer</a></p>
     }
     <p><a href="#top">Top &uarr;</a></p>
   </footer>

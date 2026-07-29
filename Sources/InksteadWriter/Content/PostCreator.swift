@@ -41,7 +41,13 @@ public enum PostCreator {
             ? slugForNewPost(title: title, body: "", date: date)
             : slugForNewPost(title: nil, body: text ?? "", date: date)
         let relative = uniquePath(root: root, relativePath: "\(config.content.posts)/\(slug).md")
-        let syndication = (config.syndication?.providers ?? []).filter { $0 != .flickr }
+        // A brand new post has no image yet, so targets that carry a photo
+        // rather than a link are left out of the scaffold.
+        let syndication = (config.syndication?.providers ?? []).filter { target in
+            guard target.provider != .flickr else { return false }
+            guard let service = target.service else { return true }
+            return !BufferChannels.requiresPhoto(service: service)
+        }
         let fields: [(String, String)] = options.kind == .article
             ? [("title", quoteYaml(title ?? "")), ("date", localIso(date))]
             : [("date", localIso(date))]
@@ -95,7 +101,7 @@ public enum PostCreator {
         return text
     }
 
-    private static func frontmatter(fields: [(String, String)], syndication: [SyndicationProviderName]) -> String {
+    private static func frontmatter(fields: [(String, String)], syndication: [SyndicationTarget]) -> String {
         var lines = fields.map { "\($0.0): \($0.1)" }
         if !syndication.isEmpty {
             lines.append("syndicate:")

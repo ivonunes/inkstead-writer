@@ -23,7 +23,7 @@ brew tap ivonunes/tap
 brew install inkstead-writer
 ```
 
-The full documentation is available at [inkstead.dev](https://inkstead.dev/).
+The full documentation is available at [inkstead.app/writer](https://inkstead.app/writer).
 
 Inside a site, use the generated `./inkstead-writer` command. It keeps that site on the Inkstead Writer version recorded in `inkstead-writer.json`. Use `inkstead-writer init --help` to see options for publishing, CI, syndication, and app connection setup.
 
