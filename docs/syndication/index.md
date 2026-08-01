@@ -1,8 +1,10 @@
 # Syndication
 
-Syndication is optional. Choose services during `inkstead-writer init`, or add them later in `inkstead-writer.json` when you want Inkstead Writer to publish posts to social platforms as part of `./inkstead-writer publish`.
+When you publish a post, Inkstead Writer can also share it to your social media accounts. This is called syndication: your website stays the post's home, and the social copies link back to it. Syndication is optional, and each post chooses whether to take part.
 
-The site-level configuration lists the enabled providers:
+## Enabling providers
+
+Choose services during `inkstead-writer init`, or add them later to `inkstead-writer.json`. The site-level configuration lists the enabled providers:
 
 ```json
 {
@@ -12,26 +14,32 @@ The site-level configuration lists the enabled providers:
 }
 ```
 
-Provider names are `mastodon`, `bluesky`, `pixelfed`, `flickr`, and `buffer`. Enabled providers are offered as defaults when you create posts and are checked by `doctor` and `requirements`.
+Provider names are `mastodon`, `bluesky`, `pixelfed`, `flickr` and `buffer`. Enabled providers are offered as defaults when you create posts, and the `doctor` and `requirements` commands check that everything they need is in place.
 
-Buffer reaches several networks from one account, so its targets name the network too, as `buffer:x` or `buffer:linkedin`. See the [Buffer guide](/syndication/buffer/).
+Buffer reaches several networks from one account, so its targets name the network too, as `buffer:x` or `buffer:linkedin`. See the [Buffer guide](buffer.md).
 
-Each post still opts in individually. Add `syndicate` to a post:
+## Opting a post in
+
+Enabling a provider only makes it available; each post still opts in individually. Add a `syndicate` list to a post's frontmatter:
 
 ```yaml
 syndicate:
   - provider-name
 ```
 
-Titled posts syndicate as title plus canonical URL. Untitled notes syndicate as native social posts. Untitled photo notes syndicate as native social posts with attached photos when the selected provider supports media uploads.
+When you publish, the post goes to every provider in its list.
 
-For photo notes, Inkstead Writer prepares temporary optimised copies when a service has image size or dimension limits. Your original files stay unchanged.
+## What each post sends
 
-After each attempt, Inkstead Writer writes the result back to the post under `syndication`, so the post records what happened. Successful targets are marked `published`, failed targets record the error, and recorded targets are never attempted again automatically. Syndication failures are logged but do not fail `publish` or your CI pipeline.
+Titled posts go out as the title plus a link to the post on your site. Untitled notes go out as native social posts made from their text. Untitled photo notes go out as native social posts with the photos attached, when the chosen service supports media uploads.
 
-To retry a failed target, fix the cause, then delete that provider's entry from the post's `syndication` block and publish again.
+When a service has image size or dimension limits, Inkstead Writer prepares temporary optimised copies of a photo note's images to fit. Your original files stay unchanged.
 
-Example results:
+`./inkstead-writer publish` deploys the site before syndication runs; see [what publishing does](../deployment/index.md#what-publishing-does) for the full order.
+
+## How results are recorded
+
+After each attempt, Inkstead Writer writes the result back into the post's frontmatter under `syndication`, so the post itself records what happened. A successful target looks like this:
 
 ```yaml
 syndication:
@@ -40,6 +48,8 @@ syndication:
     url: https://social.example/you/123
 ```
 
+A failed target records the error instead:
+
 ```yaml
 syndication:
   provider-name:
@@ -47,12 +57,16 @@ syndication:
     error: "provider-name returned 403: ..."
 ```
 
-`./inkstead-writer publish` deploys the website before syndication runs so canonical links are already live.
+Recorded targets are never attempted again automatically, so publishing again will not repost. A syndication failure is logged but does not fail `publish` or your CI pipeline; the rest of your site still goes out.
 
-Provider guides:
+## Retrying a failed target
 
-- [Bluesky](/syndication/bluesky/)
-- [Buffer](/syndication/buffer/)
-- [Mastodon](/syndication/mastodon/)
-- [Pixelfed](/syndication/pixelfed/)
-- [Flickr](/syndication/flickr/)
+Fix the cause, then delete that provider's entry from the post's `syndication` block and publish again.
+
+## Provider guides
+
+- [Bluesky](bluesky.md)
+- [Buffer](buffer.md)
+- [Mastodon](mastodon.md)
+- [Pixelfed](pixelfed.md)
+- [Flickr](flickr.md)

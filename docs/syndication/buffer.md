@@ -1,6 +1,6 @@
 # Buffer
 
-Buffer publishes to several networks from one account, so connecting it once reaches X, LinkedIn, Threads, Facebook, Instagram and Pinterest without a separate developer account for each.
+Buffer is a service that publishes to several social networks from one account. Connecting it to Inkstead Writer once reaches X, LinkedIn, Threads, Facebook, Instagram and Pinterest, without a separate developer account for each.
 
 Mastodon, Bluesky, Pixelfed and Flickr are not offered through Buffer. Inkstead Writer publishes to those directly, and going through Buffer as well would post twice.
 
@@ -8,7 +8,7 @@ Mastodon, Bluesky, Pixelfed and Flickr are not offered through Buffer. Inkstead 
 
 Generate a personal API key in Buffer under Account, then API. Keys are available on every Buffer plan, including the free one. Only organisation owners can create them.
 
-Set it as `BUFFER_API_KEY`, alongside your other syndication secrets.
+Set it as `BUFFER_API_KEY` alongside your other syndication secrets, in your site's `.env` file for local publishing or as a CI secret or variable.
 
 ## Choosing channels
 
@@ -48,19 +48,19 @@ syndicate:
 
 Use `x`, `linkedin`, `threads`, `facebook`, `instagram` and `pinterest`. Buffer's own name for a network is also accepted, so `buffer:twitter` works and means the same as `buffer:x`.
 
-TikTok, YouTube Shorts and Google Business Profile are not supported. The first two want video, and channels that publish by sending a reminder to your phone would turn publishing into a task rather than a post.
+TikTok, YouTube Shorts and Google Business Profile are not supported. The first two want video, and Google Business Profile publishes by sending a reminder to your phone rather than posting.
 
 ## What gets posted
 
 Most networks get the post's title and a link to it, trimmed to the network's limit with the link kept.
 
-LinkedIn gets the post itself: the body first, then the title and the link at the end. LinkedIn is read in place rather than clicked through, so a headline and a URL would be a link people have to leave for. Untitled notes are skipped there.
+LinkedIn gets the post itself: the body first, then the title and the link at the end, because LinkedIn posts are read in place rather than clicked through. Untitled notes are skipped there.
 
 LinkedIn rejects anything over 3,000 characters, so a longer post is cut to fit. The cut lands on a paragraph break where one is close enough, otherwise between words, and the title and link always survive. That is around 500 words; posts longer than that go out as an excerpt.
 
 Instagram and Pinterest carry a picture rather than a link, so only photo notes go to them. The post's first image is used.
 
-Photo notes attach their picture everywhere. Titled articles do not: their link already shows your site's own preview image, and attaching a copy would put the same picture in the post twice. Buffer fetches media from your site by URL, so images have to be published before syndication runs, which they are; syndication happens after the deploy.
+Photo notes attach their picture everywhere. Titled articles do not: their link already shows your site's own preview image, and attaching a copy would put the same picture in the post twice. Buffer fetches media from your site by URL; syndication runs after the deploy, so the images are already published.
 
 Everything publishes immediately rather than joining your Buffer queue.
 
@@ -84,3 +84,5 @@ syndication:
 ```
 
 To retry a network, delete its entry and publish again.
+
+See [Syndication](index.md) for how results work across providers.

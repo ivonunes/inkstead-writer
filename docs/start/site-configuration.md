@@ -1,16 +1,23 @@
 # Site Configuration
 
-Most site settings live in `inkstead-writer.json`. `inkstead-writer init` creates a working file for you, and you can edit it later as your site grows.
+Most site settings live in one file, `inkstead-writer.json`, at the root of your site. `inkstead-writer init` creates a working file for you, and you edit it as your site grows. This page walks through each section of the file.
 
-Run this after changing configuration:
+In this guide you will learn:
+
+- where your site's title, author and timezone live
+- how to change the content folders and build output
+- how to adjust URLs, Markdown, feeds and media handling
+- how to point Inkstead Writer at a custom theme and external data
+
+After changing configuration, check that everything still fits together:
 
 ```bash
 ./inkstead-writer doctor
 ```
 
-Doctor checks that the site can be loaded, required folders exist, publishing settings match the selected provider, and needed environment variables are available.
+`doctor` reports anything the change broke; see [what doctor checks](commands.md#what-doctor-checks) for the full list.
 
-## Site Details
+## Site details
 
 The `site` section controls the public identity of the website:
 
@@ -20,18 +27,20 @@ The `site` section controls the public identity of the website:
     "title": "My Website",
     "url": "https://example.com",
     "author": "Your Name",
-    "description": "Notes, photos, and longer writing."
+    "description": "Notes, photos and longer writing."
   }
 }
 ```
 
-Optional fields include `lang`, `timezone`, `email`, `avatar`, `bio`, `navigation`, and `social`. Themes can use these values when rendering headers, feeds, author details, and social links.
+Optional fields include `lang`, `timezone`, `email`, `avatar`, `bio`, `navigation` and `social`. Themes can use these values when rendering headers, feeds, author details and social links.
 
-`timezone` takes an IANA identifier such as `Europe/Lisbon`. Post timestamps written with an explicit offset, such as `2026-05-10T18:30:00+01:00`, are honoured as written; timestamps without an offset and date-only values are interpreted as UTC. The timezone then determines which calendar day each post falls on for dated post URLs and displayed dates. When unset, UTC is used. Because dated URLs depend on it, changing `timezone` later can move the permalink of any post published near midnight.
+`timezone` takes an IANA identifier such as `Europe/Lisbon`. Post timestamps written with an explicit offset, such as `2026-05-10T18:30:00+01:00`, are honoured as written; timestamps without an offset and date-only values are interpreted as UTC. The timezone then determines which calendar day each post falls on for dated post URLs and displayed dates. When unset, UTC is used.
 
-## Content Folders
+> **Warning:** Dated URLs depend on the timezone, so changing `timezone` later can move the permalink of any post published near midnight.
 
-Inkstead Writer uses these folders by default:
+## Content folders
+
+Inkstead Writer looks for your writing in these folders by default:
 
 ```json
 {
@@ -44,11 +53,11 @@ Inkstead Writer uses these folders by default:
 }
 ```
 
-Posts, pages, media, and collections can live somewhere else if you change those paths. The docs use the default paths unless a section says otherwise.
+Posts, pages, media and collections can live somewhere else if you change those paths. The docs use the default paths unless a section says otherwise.
 
 Site media is published at `/media/` regardless of where the source media folder lives. For example, a file at `content/media/photo.jpg` is referenced as `/media/photo.jpg` in posts and templates.
 
-## Build Output
+## Build output
 
 By default, builds are written to `dist`:
 
@@ -62,7 +71,7 @@ By default, builds are written to `dist`:
 
 If you change the output directory, run `./inkstead-writer migrate` or update generated CI files so they publish the same folder.
 
-## URLs, Markdown, And Feeds
+## URLs, Markdown and feeds
 
 Posts use dated URLs by default:
 
@@ -70,7 +79,7 @@ Posts use dated URLs by default:
 /2026/05/10/my-post/
 ```
 
-You can switch to slug-only post URLs:
+If you prefer URLs without the date, switch to slug-only post URLs:
 
 ```json
 {
@@ -113,7 +122,7 @@ Feeds can also be limited:
 
 ## Media
 
-Inkstead Writer keeps your original files unchanged and optimises the copied output during builds:
+During builds, Inkstead Writer keeps your original files unchanged and optimises the copied output:
 
 ```json
 {
@@ -128,7 +137,7 @@ Inkstead Writer keeps your original files unchanged and optimises the copied out
 
 Set `optimize` to `false` if you want media copied without resizing or recompression.
 
-## Themes And Assets
+## Themes and assets
 
 The default theme is built in. To use a custom theme folder:
 
@@ -162,11 +171,11 @@ For generated theme assets, use build hooks:
 }
 ```
 
-See [Themes](/start/themes/) for template, asset, and hook details.
+See [Themes](themes.md) for template, asset and hook details.
 
-## Data Sources
+## Data sources
 
-Templates can receive build-time JSON data:
+If a page needs data from outside the site, such as an events list or a set of links, templates can receive build-time JSON data:
 
 ```json
 {
@@ -182,13 +191,13 @@ Templates can receive build-time JSON data:
 }
 ```
 
-Remote data sources must return JSON. Local files are resolved relative to the site root. Use cache durations like `30m`, `1h`, or `1d` when remote data does not need to be fetched on every build.
+Remote data sources must return JSON. Local files are resolved relative to the site root. Use cache durations like `30m`, `1h` or `1d` when remote data does not need to be fetched on every build.
 
-## Publishing And App Setup
+## Publishing and app setup
 
-Publishing, CI, syndication, and app connection settings also live in `inkstead-writer.json`, but their setup depends on the provider:
+Publishing, CI, syndication and app connection settings also live in `inkstead-writer.json`, but their setup depends on the provider:
 
-- [Deployment](/deployment/)
-- [Continuous Integration](/ci/)
-- [Syndication](/syndication/)
-- [App Connection](/extras/app-connection/)
+- [Deployment](../deployment/index.md)
+- [Continuous Integration](../ci/index.md)
+- [Syndication](../syndication/index.md)
+- [App Connection](../extras/app-connection.md)

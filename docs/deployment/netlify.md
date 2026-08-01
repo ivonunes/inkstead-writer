@@ -1,6 +1,8 @@
 # Netlify
 
-Inkstead Writer can publish a static site to Netlify.
+Netlify is a hosting service for static sites. Inkstead Writer publishes to it directly through the Netlify API, so there is no extra tooling to install. You need a Netlify account with a site created in it, and two values from that account.
+
+## Configuration
 
 Choose Netlify during `inkstead-writer init`, or add this to `inkstead-writer.json` later:
 
@@ -12,18 +14,26 @@ Choose Netlify during `inkstead-writer init`, or add this to `inkstead-writer.js
 }
 ```
 
-## Required Environment Variables
+## Environment variables
 
-- `NETLIFY_SITE_ID`
-- `NETLIFY_AUTH_TOKEN`
+Deploying needs two values from your Netlify account:
+
+| Variable | What it is |
+| --- | --- |
+| `NETLIFY_SITE_ID` | The project ID shown in Netlify project settings. |
+| `NETLIFY_AUTH_TOKEN` | A Netlify personal access token. |
 
 For local publishing, put those values in `.env`. For automated publishing, add them as CI secrets or variables.
 
-`NETLIFY_SITE_ID` is the project ID shown in Netlify project settings. `NETLIFY_AUTH_TOKEN` is a Netlify personal access token.
+Before the first publish, confirm the Netlify variables are available:
 
-Run `./inkstead-writer doctor` before the first publish to confirm the Netlify variables are available.
+```bash
+./inkstead-writer doctor
+```
 
-## Publish
+## Publishing
+
+With the variables in place, publish the site:
 
 ```bash
 ./inkstead-writer publish

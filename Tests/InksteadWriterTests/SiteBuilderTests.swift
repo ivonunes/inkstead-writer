@@ -141,7 +141,27 @@ final class SiteBuilderTests: XCTestCase {
         try SiteBuilder.build(root: root.url, config: config)
 
         let home = try String(contentsOf: root.url.appendingPathComponent("dist/index.html"), encoding: .utf8)
-        XCTAssertFalse(home.contains("Powered by"))
+        XCTAssertFalse(home.contains("Written in"))
+        XCTAssertFalse(home.contains("site-footer-credit"))
+    }
+
+    func testFooterAttributionLinksToInkstead() throws {
+        let root = try TemporaryDirectory()
+        try FileManager.default.createDirectory(at: root.url.appendingPathComponent("content/posts"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.url.appendingPathComponent("content/pages"), withIntermediateDirectories: true)
+        try """
+        {
+          "inkstead": { "version": "2.0.0" },
+          "site": { "title": "My Website", "url": "https://example.com", "author": "Your Name" }
+        }
+        """.write(to: root.url.appendingPathComponent("inkstead.json"), atomically: true, encoding: .utf8)
+
+        let config = try ConfigLoader.load(root: root.url)
+        try SiteBuilder.build(root: root.url, config: config)
+
+        let home = try String(contentsOf: root.url.appendingPathComponent("dist/index.html"), encoding: .utf8)
+        XCTAssertTrue(home.contains("Written in"))
+        XCTAssertTrue(home.contains(#"href="https://inkstead.app""#))
     }
 
     func testBuildRejectsLegacyLiquidTemplatesAndPointsToUpgrade() throws {

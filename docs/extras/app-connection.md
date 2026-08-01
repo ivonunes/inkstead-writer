@@ -1,12 +1,10 @@
 # App Connection
 
-The Inkstead app can connect to an Inkstead Writer site so it knows which repository to edit, where posts and media live, and which posting categories or syndication providers are available.
+The Inkstead app can connect to an Inkstead Writer site so it knows which repository to edit, where posts and media live and which posting categories or syndication providers are available. You can set this up during `inkstead-writer init`, add it to `inkstead-writer.json` later or leave it to be detected automatically.
 
-You can configure this during `inkstead-writer init`, or add it later in `inkstead-writer.json`.
+## Configuring the connection
 
-## Configure
-
-Add a `connection` section:
+Add a `connection` section to `inkstead-writer.json`:
 
 ```json
 {
@@ -19,33 +17,31 @@ Add a `connection` section:
 }
 ```
 
-`provider` can be `github`, `gitlab`, or `forgejo`.
+The keys:
 
-`repository` is the repository owner and name, such as `owner/site`.
+| Key | What it does |
+| --- | --- |
+| `provider` | Where the repository lives: `github`, `gitlab` or `forgejo` |
+| `repository` | The repository owner and name, such as `owner/site` |
+| `branch` | The branch to edit; defaults to the branch detected by CI when available |
+| `instanceUrl` | The server address, useful for Forgejo or self-managed GitLab instances |
+| `categories` | Optional shortcuts the app offers when composing posts |
 
-`branch` defaults to the branch detected by CI when available.
+## Automatic detection
 
-`instanceUrl` is useful for Forgejo or self-managed GitLab instances.
+If you leave `connection` out of the config, Inkstead Writer still tries to infer useful values during CI builds. On GitHub Actions, GitLab CI or Forgejo Actions, the build can usually detect the provider, repository, branch and instance URL from environment variables.
 
-`categories` gives the app optional shortcuts when composing posts.
+If repository details are not available, the app can ask for them during setup.
 
-## Automatic Detection
+## The published site file
 
-If you leave `connection` out of the config, Inkstead Writer still tries to infer useful values during CI builds.
-
-On GitHub Actions, GitLab CI, or Forgejo Actions, the build can usually detect the provider, repository, branch, and instance URL from environment variables. If repository details are not available, the app can ask for them during setup.
-
-## Published Site File
-
-During builds, Inkstead Writer publishes a small public file at:
+During builds, Inkstead Writer publishes a small public file at the root of your site:
 
 ```text
 /inkstead-writer.json
 ```
 
-It does not contain tokens or secrets. It only contains public setup information for the app.
-
-Example:
+It does not contain tokens or secrets, only public setup information for the app. It looks like this:
 
 ```json
 {
@@ -63,4 +59,4 @@ Example:
 
 The file also includes a `version` field recording the Inkstead Writer release that built the site.
 
-Authentication happens in the app. Inkstead Writer never writes access tokens into the built website.
+Authentication happens in the app. Inkstead Writer never writes access tokens into the built site.

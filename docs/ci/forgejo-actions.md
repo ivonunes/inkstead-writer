@@ -1,19 +1,23 @@
 # Forgejo Actions
 
-Inkstead Writer can generate a `.forgejo/workflows/publish.yml` workflow during `inkstead-writer init`.
+Forgejo is a self-hosted git service, and Forgejo Actions is its CI. If your site lives on a Forgejo instance, the generated workflow publishes it every time you push, so a finished post goes live on its own.
 
-The workflow runs on `main` and can also be started manually from Forgejo. It checks out the repository and runs:
+Inkstead Writer can generate a `.forgejo/workflows/publish.yml` workflow during `inkstead-writer init`. The workflow runs when you push. It checks out the repository and runs:
 
 ```bash
 ./inkstead-writer publish
 ```
 
-## Secrets
+## Setting up secrets
 
-Run `./inkstead-writer requirements`, then add the listed environment variable names as Forgejo Actions secrets. The exact list depends on your publishing and syndication setup.
+To see which secrets your site needs, run:
 
-## Syndication Metadata Commits
+```bash
+./inkstead-writer requirements
+```
 
-When syndication adds links to your posts in Forgejo Actions, Inkstead Writer commits those changes with `[skip ci]` and pushes them back to the current branch.
+Add the listed environment variable names as Forgejo Actions secrets. The exact list depends on your publishing and syndication setup.
 
-Your Forgejo runner must have permission to push through the checkout credentials. If it does not, syndication can still publish, but the metadata commit will not be pushed back automatically.
+## Saving syndication links
+
+When syndication adds links to your posts, the workflow commits them back to the current branch, which requires the checkout credentials to have push permission. See [Saving syndication links](index.md#saving-syndication-links) for how this works.

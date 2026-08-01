@@ -1,12 +1,19 @@
 # Themes
 
-Inkstead Writer ships with a default theme. Add `.plume` files when you want to replace part of it with your own design.
+Inkstead Writer ships with a default theme, so a new site looks finished from day one. When you want your own design, you replace parts of the theme with `.plume` template files, and anything you do not replace keeps using the default.
 
-Plume is the template language used by Inkstead Writer. This page focuses on how Writer loads themes and what data it passes to them. For the language itself, use the [Plume syntax reference](https://plumekit.dev/docs/syntax/), [component guide](https://plumekit.dev/docs/components/), [resources guide](https://plumekit.dev/docs/customise/resources/), and [behaviour guide](https://plumekit.dev/docs/customise/behaviour/).
+Plume is the template language used by Inkstead Writer. This page focuses on how Inkstead Writer loads themes and what data it passes to them. For the language itself, use the [Plume syntax reference](https://plumekit.dev/docs/syntax/), [component guide](https://plumekit.dev/docs/components/), [resources guide](https://plumekit.dev/docs/customise/resources/) and [behaviour guide](https://plumekit.dev/docs/customise/behaviour/).
 
-## Start From The Default Theme
+In this guide you will learn:
 
-Copy the default templates into your site:
+- how to start from the default theme and override parts of it
+- which page templates Inkstead Writer looks for and what data they receive
+- how assets, images, styles and scripts work in templates
+- how to customise feeds, layouts and the footer
+
+## Starting from the default theme
+
+The easiest way to learn the theme structure is to copy the default templates into your site:
 
 ```bash
 ./inkstead-writer theme eject
@@ -16,7 +23,7 @@ Existing files are left alone. Use `--force` if you want to overwrite them.
 
 You do not need to eject everything to customise a site. Any file you add under `theme` overrides the matching built-in file, and missing files continue to use the default theme.
 
-## Theme Folder
+## Theme folder
 
 The recommended shape is:
 
@@ -40,11 +47,11 @@ theme/
     site.plume
 ```
 
-If you want to keep themes somewhere else, set `theme.path` in [Site Configuration](/start/site-configuration/).
+If you want to keep themes somewhere else, set `theme.path` in [Site Configuration](site-configuration.md).
 
-## Page Templates
+## Page templates
 
-Writer looks for these page templates under `theme/pages`:
+Inkstead Writer looks for these page templates under `theme/pages`:
 
 - `404.plume` for the not-found page written to `/404.html`.
 - `home.plume` for the homepage.
@@ -54,7 +61,7 @@ Writer looks for these page templates under `theme/pages`:
 - `feed.xml.plume` for RSS feeds.
 - `feed.json.plume` for JSON Feed.
 
-Standalone pages can also use slug-specific templates. For example, `content/pages/photos.md` normally renders with `page.plume`, but `theme/pages/photos.plume` takes over that page when it exists.
+Standalone pages can also use slug-specific templates. For example, `content/pages/photos.md` normally renders with `page.plume`, but `theme/pages/photos.plume` takes over that page when it exists:
 
 ```txt
 content/pages/photos.md
@@ -73,15 +80,15 @@ theme/pages/photos.plume
 </div>
 ```
 
-The not-found page receives a `notFound` object with `title`, `description`, and `message` fields.
+The not-found page receives a `notFound` object with `title`, `description` and `message` fields.
 
-## Plume In Writer
+## Plume in Inkstead Writer
 
-Writer marks generated content HTML as safe, so `{post.html}`, `{post.excerpt}`, `{page.html}`, and `{content}` render as HTML without `| raw`. Ordinary strings still escape by default.
+Inkstead Writer marks generated content HTML as safe, so `{post.html}`, `{post.excerpt}`, `{page.html}` and `{content}` render as HTML without `| raw`. Ordinary strings still escape by default.
 
 Use `| raw` only when you intentionally need to render your own trusted string as HTML.
 
-## Theme Commands
+## Theme commands
 
 Check a theme without building the site:
 
@@ -96,17 +103,17 @@ Format templates:
 ./inkstead-writer theme format --check
 ```
 
-Run the language server for editor integrations:
+Run the language server, the tool that gives your editor checking and completions as you type:
 
 ```bash
 ./inkstead-writer theme language-server
 ```
 
-Inkstead Writer includes Plume, so the generated `./inkstead-writer` command uses the Plume version tied to that site. Standalone Plume CLI and editor details live in the [Plume tooling docs](https://plumekit.dev/docs/tooling/).
+Inkstead Writer includes Plume, so the `./inkstead-writer` wrapper uses the Plume version tied to that site. Standalone Plume CLI and editor details live in the [Plume tooling docs](https://plumekit.dev/docs/tooling/).
 
-## Assets And Images
+## Assets and images
 
-Use `asset()` for theme files that should be copied to the built site with a fingerprinted URL:
+Use `asset()` for theme files that should be copied to the built site with a fingerprinted URL, a filename that changes whenever the file changes, so browsers never serve a stale copy:
 
 ```plume
 <img src="{asset('images/avatar.png')}" alt="Ivo">
@@ -114,7 +121,7 @@ Use `asset()` for theme files that should be copied to the built site with a fin
 
 Relative asset paths are resolved relative to the template or component file first, then relative to the theme folder. Theme assets are emitted under `/assets/plume/`.
 
-For images, prefer `@image`. Writer resolves the asset, fingerprints theme images, adds dimensions when it can read them, and defaults to `loading="lazy"` and `decoding="async"`:
+For images, prefer `@image`. Inkstead Writer resolves the asset, fingerprints theme images, adds dimensions when it can read them and defaults to `loading="lazy"` and `decoding="async"`:
 
 ```plume
 @image("images/avatar.png", alt: "Ivo", class: "avatar", sizes: "64px")
@@ -128,11 +135,11 @@ Add `widths:` to generate responsive variants and a `srcset` automatically:
 
 Site media references such as `/media/photo.jpg` keep their public media path. Theme-local images and responsive variants are copied to `/assets/plume/`.
 
-For static files that should be copied without Plume processing, use passthrough assets in `inkstead-writer.json`. See [Site Configuration](/start/site-configuration/).
+For static files that should be copied without Plume processing, use passthrough assets in `inkstead-writer.json`. See [Site Configuration](site-configuration.md).
 
-## Styles And Scripts
+## Styles and scripts
 
-Plume templates can declare styles and scripts next to the markup that uses them. Writer extracts those resources into fingerprinted files under `/assets/plume/` and injects them into the page.
+Plume templates can declare styles and scripts next to the markup that uses them. Inkstead Writer extracts those resources into fingerprinted files under `/assets/plume/` and injects them into the page:
 
 ```plume
 @style(file: "styles/site.css")
@@ -162,7 +169,7 @@ For the full resource model, see [Plume resources](https://plumekit.dev/docs/cus
 
 ## Interactivity
 
-Writer emits `/assets/plume-runtime.js` only on pages that use Plume state, state bindings, style bindings, browser actions, or enhanced navigation.
+Themes can respond to clicks and other browser events without you writing separate JavaScript. Inkstead Writer emits `/assets/plume-runtime.js` only on pages that use Plume state, state bindings, style bindings, browser actions or enhanced navigation:
 
 ```plume
 @state expanded = false
@@ -190,9 +197,9 @@ Use `@navigation` in `theme/layouts/default.plume` when same-origin links should
 }
 ```
 
-See the [Plume behaviour guide](https://plumekit.dev/docs/customise/behaviour/) for state, actions, measurement, viewport events, scripts, and navigation hooks.
+See the [Plume behaviour guide](https://plumekit.dev/docs/customise/behaviour/) for state, actions, measurement, viewport events, scripts and navigation hooks.
 
-## Template Context
+## Template context
 
 Templates receive:
 
@@ -216,7 +223,7 @@ Templates receive:
 - `meta`
 - `now`, including `now.year`
 
-`meta` includes `title`, `canonicalUrl`, and `description`. Post and page pages use an excerpt of their own content for `meta.description`; index and category pages use `site.description`.
+`meta` includes `title`, `canonicalUrl` and `description`. Post and page pages use an excerpt of their own content for `meta.description`; index and category pages use `site.description`.
 
 Post objects include `previous` and `next` so themes can add post navigation.
 
@@ -245,17 +252,17 @@ Configured data sources are exposed under `data`:
 }
 ```
 
-See [Site Configuration](/start/site-configuration/) for configuring collections and data sources.
+See [Site Configuration](site-configuration.md) for configuring collections and data sources.
 
 ## Layouts
 
-If a template returns a full HTML document, Writer uses it as-is. Otherwise, Writer wraps the rendered content in a layout.
+If a template returns a full HTML document, Inkstead Writer uses it as-is. Otherwise, the rendered content is wrapped in a layout.
 
 Override `theme/layouts/default.plume` to control the document shell.
 
-## Feed Templates
+## Feed templates
 
-Writer writes RSS at `/feed.xml` and JSON Feed at `/feed.json`.
+Inkstead Writer writes RSS at `/feed.xml` and JSON Feed at `/feed.json`.
 
 Override these files to customise them:
 
@@ -277,9 +284,9 @@ Category feeds use the same templates with `feed.category` populated and `feed.i
 
 RSS browser presentation is optional. In `theme/pages/feed.xml.plume`, declare `@style` and `@script` resources, then include `feed.presentationScriptSrc` where you want the browser presentation script to appear. RSS readers still receive RSS.
 
-## Footer Attribution
+## Footer attribution
 
-The default templates include a copyright notice and a small `Powered by Inkstead Writer` link. To remove the attribution without ejecting or editing the default templates, set:
+The default templates include a copyright notice and a small `Written in Inkstead` link. To remove the attribution without ejecting or editing the default templates, set:
 
 ```json
 {
@@ -289,9 +296,9 @@ The default templates include a copyright notice and a small `Powered by Inkstea
 }
 ```
 
-## Build Hooks
+## Build hooks
 
-Use hooks when a theme needs generated assets before Writer copies passthrough files or resolves Plume asset references. A common use is bundling larger JavaScript modules or compiling CSS before referencing the output with `@script(file:)` or `@style(file:)`.
+Use hooks when a theme needs generated assets before Inkstead Writer copies passthrough files or resolves Plume asset references. A common use is bundling larger JavaScript modules or compiling CSS before referencing the output with `@script(file:)` or `@style(file:)`:
 
 ```json
 {
