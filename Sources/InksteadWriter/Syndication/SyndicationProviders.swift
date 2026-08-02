@@ -369,8 +369,11 @@ public enum SyndicationProviders {
 
         var candidates: [[String: Any]] = []
         for organizationID in organizationIDs {
+            // The variable must be declared as Buffer's own OrganizationId
+            // scalar: the server rejects a String! declaration outright, even
+            // though the value is a plain string either way.
             let response = try await bufferQuery(
-                "query($organizationId: String!) { channels(input: { organizationId: $organizationId }) { id name service } }",
+                "query($organizationId: OrganizationId!) { channels(input: { organizationId: $organizationId }) { id name service } }",
                 variables: ["organizationId": organizationID],
                 key: key,
                 context: context
@@ -464,12 +467,22 @@ public enum SyndicationProviders {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let response = try await context.http(request)
+        let expiredKeyMessage = "Buffer rejected its key, which may have expired (Buffer keys last a year at most). Create a new key in Buffer and reconnect Buffer in Inkstead, or update the BUFFER_API_KEY secret."
         guard (200..<300).contains(response.statusCode) else {
+            if response.statusCode == 401 {
+                throw InksteadWriterError.io(expiredKeyMessage)
+            }
             throw InksteadWriterError.io("Buffer returned \(response.statusCode)\(errorDetail(in: response.body)).")
         }
         let json = (try? JSONSerialization.jsonObject(with: response.body)) as? [String: Any] ?? [:]
         // GraphQL reports failures in an errors array with a 200 status.
         if let errors = json["errors"] as? [[String: Any]], !errors.isEmpty {
+            // A dead key is the one failure a site owner will eventually hit
+            // without changing anything, so it gets reconnect wording rather
+            // than the raw GraphQL message.
+            if errors.contains(where: { (($0["extensions"] as? [String: Any])?["code"] as? String) == "UNAUTHENTICATED" }) {
+                throw InksteadWriterError.io(expiredKeyMessage)
+            }
             let messages = errors.compactMap { $0["message"] as? String }.joined(separator: " — ")
             throw InksteadWriterError.io("Buffer returned an error\(messages.isEmpty ? "" : ": \(messages)").")
         }

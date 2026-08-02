@@ -214,6 +214,22 @@ final class BufferSyndicationTests: XCTestCase {
         XCTAssertTrue(result.fields["error"]?.contains("Invalid API key") == true, result.fields["error"] ?? "")
     }
 
+    /// A dead key is the one failure a site owner eventually hits without
+    /// changing anything (Buffer keys last a year at most), so it must fail
+    /// with reconnect wording rather than a raw GraphQL message.
+    func testPublishGivesAnExpiredKeyReconnectWording() async throws {
+        let post = try samplePost(title: "Article")
+        let context = SyndicationContext(root: URL(fileURLWithPath: "/tmp"), env: ["BUFFER_API_KEY": "key"]) { _ in
+            HTTPResponse(statusCode: 200, body: Data(#"{"errors":[{"message":"An authentication JWT or Access Token is required","extensions":{"code":"UNAUTHENTICATED"}}]}"#.utf8))
+        }
+
+        let result = await SyndicationProviders.publish(.buffer("x"), post: post, context: context)
+
+        XCTAssertEqual(result.status, .failed)
+        XCTAssertTrue(result.fields["error"]?.contains("reconnect Buffer in Inkstead") == true, result.fields["error"] ?? "")
+        XCTAssertTrue(result.fields["error"]?.contains("BUFFER_API_KEY") == true, result.fields["error"] ?? "")
+    }
+
     func testPhotoPostAttachesItsImageByPublicURL() async throws {
         let post = try samplePhotoPost()
         var input: [String: Any] = [:]
