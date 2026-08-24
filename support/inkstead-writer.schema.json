@@ -1,0 +1,324 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://inkstead.app/writer/schema/inkstead-writer.json",
+  "title": "Inkstead Writer site configuration",
+  "description": "The inkstead-writer.json file at the root of an Inkstead Writer site.",
+  "type": "object",
+  "required": ["site"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "The JSON Schema this file follows. Editors use it for validation and completion."
+    },
+    "version": {
+      "type": "string",
+      "description": "The Inkstead Writer version the site was last migrated to. Written by init and migrate; leave it alone.",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "site": { "$ref": "#/$defs/site" },
+    "content": { "$ref": "#/$defs/content" },
+    "build": { "$ref": "#/$defs/build" },
+    "hooks": { "$ref": "#/$defs/hooks" },
+    "urls": { "$ref": "#/$defs/urls" },
+    "markdown": { "$ref": "#/$defs/markdown" },
+    "assets": { "$ref": "#/$defs/assets" },
+    "media": { "$ref": "#/$defs/media" },
+    "theme": { "$ref": "#/$defs/theme" },
+    "pagination": { "$ref": "#/$defs/pagination" },
+    "feeds": { "$ref": "#/$defs/feeds" },
+    "data": {
+      "type": "object",
+      "description": "Build-time JSON data made available to templates, keyed by the name templates use. Names must be valid Plume identifiers.",
+      "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+      "additionalProperties": { "$ref": "#/$defs/dataSource" }
+    },
+    "connection": { "$ref": "#/$defs/connection" },
+    "ci": { "$ref": "#/$defs/ci" },
+    "deploy": { "$ref": "#/$defs/deploy" },
+    "syndication": { "$ref": "#/$defs/syndication" },
+    "inkstead": {
+      "type": "object",
+      "deprecated": true,
+      "doNotSuggest": true,
+      "description": "Legacy version record from inkstead.json. Run migrate to replace it with the top-level version key.",
+      "properties": {
+        "version": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "photos": {
+      "$ref": "#/$defs/media",
+      "deprecated": true,
+      "doNotSuggest": true,
+      "description": "Legacy name for the media section. Use media instead."
+    },
+    "writer": {
+      "type": "object",
+      "deprecated": true,
+      "doNotSuggest": true,
+      "description": "Legacy app connection settings. Run migrate to move them to the connection section."
+    }
+  },
+  "$defs": {
+    "site": {
+      "type": "object",
+      "description": "The public identity of the website. Themes use these values when rendering headers, feeds, author details and social links.",
+      "required": ["title", "url", "author"],
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "description": "The site title." },
+        "url": { "type": "string", "minLength": 1, "description": "The public address of the site, such as https://example.com." },
+        "author": { "type": "string", "minLength": 1, "description": "The site author's name." },
+        "description": { "type": "string", "description": "A short description of the site, used by themes and feeds." },
+        "lang": { "type": "string", "description": "The language of the site as a BCP 47 tag, such as en or pt-PT." },
+        "timezone": {
+          "type": "string",
+          "description": "An IANA identifier such as Europe/Lisbon. Determines which calendar day each post falls on for dated post URLs and displayed dates. When unset, UTC is used. Changing it later can move the permalink of any post published near midnight."
+        },
+        "email": { "type": "string", "description": "The author's email address." },
+        "avatar": { "type": "string", "description": "Path or URL of the author's avatar image." },
+        "bio": { "type": "string", "description": "A short author biography." },
+        "navigation": {
+          "type": "array",
+          "description": "Links shown in the site navigation.",
+          "items": { "$ref": "#/$defs/navigationItem" }
+        },
+        "social": {
+          "type": "array",
+          "description": "Links to the author's profiles elsewhere.",
+          "items": { "$ref": "#/$defs/socialItem" }
+        }
+      }
+    },
+    "navigationItem": {
+      "type": "object",
+      "required": ["name", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "description": "The link text." },
+        "url": { "type": "string", "description": "The link target." },
+        "icon": { "type": "string", "description": "An icon name the theme understands." },
+        "className": { "type": "string", "description": "An extra CSS class for the link." }
+      }
+    },
+    "socialItem": {
+      "type": "object",
+      "required": ["name", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "description": "The link text." },
+        "url": { "type": "string", "description": "The profile address." },
+        "relMe": { "type": "boolean", "description": "Whether to mark the link with rel=\"me\" for identity verification." },
+        "icon": { "type": "string", "description": "An icon name the theme understands." },
+        "className": { "type": "string", "description": "An extra CSS class for the link." }
+      }
+    },
+    "content": {
+      "type": "object",
+      "description": "Where Inkstead Writer looks for your writing. Paths are relative to the site root.",
+      "additionalProperties": false,
+      "properties": {
+        "posts": { "type": "string", "default": "content/posts", "description": "The posts folder." },
+        "pages": { "type": "string", "default": "content/pages", "description": "The pages folder." },
+        "media": { "type": "string", "default": "content/media", "description": "The media folder. Site media is published at /media/ regardless of where the source folder lives." },
+        "collections": { "type": "string", "default": "content/collections", "minLength": 1, "description": "The collections folder." }
+      }
+    },
+    "build": {
+      "type": "object",
+      "description": "Build output settings.",
+      "additionalProperties": false,
+      "properties": {
+        "output": {
+          "type": "string",
+          "default": "dist",
+          "description": "The folder builds are written to. If you change it, run migrate or update generated CI files so they publish the same folder."
+        }
+      }
+    },
+    "hooks": {
+      "type": "object",
+      "description": "Shell commands run around the build, for example to generate theme assets.",
+      "additionalProperties": false,
+      "properties": {
+        "beforeBuild": { "type": "array", "items": { "type": "string" }, "description": "Commands run before the build." },
+        "afterBuild": { "type": "array", "items": { "type": "string" }, "description": "Commands run after the build." }
+      }
+    },
+    "urls": {
+      "type": "object",
+      "description": "URL layout settings.",
+      "additionalProperties": false,
+      "properties": {
+        "posts": {
+          "type": "string",
+          "enum": ["dated", "slug"],
+          "default": "dated",
+          "description": "Post URL style: dated gives /2026/05/10/my-post/, slug gives /my-post/."
+        }
+      }
+    },
+    "markdown": {
+      "type": "object",
+      "description": "Markdown rendering settings. Raw HTML and hard line breaks are allowed by default.",
+      "additionalProperties": false,
+      "properties": {
+        "html": { "type": "boolean", "default": true, "description": "Allow raw HTML in Markdown." },
+        "breaks": { "type": "boolean", "default": true, "description": "Treat single line breaks as hard breaks." }
+      }
+    },
+    "assets": {
+      "type": "object",
+      "description": "Static files copied to the output without Plume processing.",
+      "additionalProperties": false,
+      "properties": {
+        "passthrough": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/passthroughAsset" }
+        }
+      }
+    },
+    "passthroughAsset": {
+      "type": "object",
+      "required": ["from"],
+      "additionalProperties": false,
+      "properties": {
+        "from": { "type": "string", "description": "The source folder or file, relative to the site root." },
+        "to": { "type": "string", "description": "The destination inside the output folder. Use . for the output root." }
+      }
+    },
+    "media": {
+      "type": "object",
+      "description": "How copied media is optimised during builds. Original files are never changed.",
+      "additionalProperties": false,
+      "properties": {
+        "optimize": { "type": "boolean", "default": true, "description": "Set to false to copy media without resizing or recompression." },
+        "maxWidth": { "type": "integer", "minimum": 1, "default": 2400, "description": "Maximum width of published images in pixels." },
+        "maxHeight": { "type": "integer", "minimum": 1, "default": 2400, "description": "Maximum height of published images in pixels." },
+        "quality": { "type": "integer", "minimum": 1, "maximum": 100, "default": 82, "description": "Compression quality for published images." }
+      }
+    },
+    "theme": {
+      "type": "object",
+      "description": "Theme settings. The default theme is built in.",
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "description": "A custom theme folder, relative to the site root." },
+        "showPoweredBy": { "type": "boolean", "default": true, "description": "Whether the theme shows the Inkstead credit." }
+      }
+    },
+    "pagination": {
+      "type": "object",
+      "description": "Homepage and category pagination.",
+      "additionalProperties": false,
+      "properties": {
+        "postsPerPage": { "type": "integer", "minimum": 1, "default": 20, "description": "Posts per page." }
+      }
+    },
+    "feeds": {
+      "type": "object",
+      "description": "Feed settings.",
+      "additionalProperties": false,
+      "properties": {
+        "limit": { "type": "integer", "minimum": 1, "description": "Maximum number of entries in each feed." }
+      }
+    },
+    "dataSource": {
+      "description": "A data source: either a URL or local file path as a plain string, or an object with exactly one of url or file.",
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "A URL (fetched at build time, must return JSON) or a file path relative to the site root."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "url": { "type": "string", "description": "A remote JSON document fetched at build time." },
+            "file": { "type": "string", "description": "A local JSON file, relative to the site root." },
+            "path": {
+              "type": "string",
+              "deprecated": true,
+              "doNotSuggest": true,
+              "description": "Legacy name for file."
+            },
+            "cache": {
+              "type": "string",
+              "description": "How long remote data may be reused between builds, such as 30m, 1h or 1d. A bare number is seconds; none disables caching.",
+              "pattern": "^([0-9]+(\\.[0-9]+)?[smhd]?|none|false)$"
+            },
+            "required": { "type": "boolean", "description": "Fail the build when the data cannot be loaded." },
+            "headers": {
+              "type": "object",
+              "description": "Extra HTTP headers sent when fetching remote data.",
+              "additionalProperties": { "type": "string" }
+            }
+          }
+        }
+      ]
+    },
+    "connection": {
+      "type": "object",
+      "description": "How the Inkstead app reaches the site's repository. Leave it out to let CI builds infer the values.",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["github", "gitlab", "forgejo"],
+          "description": "Where the repository lives."
+        },
+        "repository": { "type": "string", "minLength": 1, "description": "The repository owner and name, such as owner/site." },
+        "branch": { "type": "string", "minLength": 1, "description": "The branch to edit; defaults to the branch detected by CI when available." },
+        "instanceUrl": { "type": "string", "description": "The server address, useful for Forgejo or self-managed GitLab instances." },
+        "categories": {
+          "type": "array",
+          "description": "Optional shortcuts the app offers when composing posts.",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
+      }
+    },
+    "ci": {
+      "type": "object",
+      "description": "The continuous integration service that builds the site.",
+      "required": ["provider"],
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["github-actions", "gitlab-ci", "forgejo-actions"]
+        }
+      }
+    },
+    "deploy": {
+      "type": "object",
+      "description": "Where the built site is published. GitHub Pages requires GitHub Actions CI and GitLab Pages requires GitLab CI.",
+      "required": ["provider"],
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["cloudflare-workers", "github-pages", "gitlab-pages", "netlify"]
+        },
+        "projectName": { "type": "string", "description": "The project name on the hosting provider, used by Cloudflare Workers." }
+      }
+    },
+    "syndication": {
+      "type": "object",
+      "description": "Services posts can be syndicated to. Each post still opts in with a syndicate list in its frontmatter.",
+      "additionalProperties": false,
+      "properties": {
+        "providers": {
+          "type": "array",
+          "description": "Provider names: mastodon, bluesky, pixelfed, flickr or buffer. Buffer targets name the network too, as buffer:x or buffer:linkedin, and may name the account, as buffer:x@name.",
+          "items": {
+            "type": "string",
+            "pattern": "^(mastodon|bluesky|flickr|pixelfed|buffer)(:[^:@\\s]+(@\\S+)?)?$"
+          },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

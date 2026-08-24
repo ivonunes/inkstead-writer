@@ -17,6 +17,8 @@ After changing configuration, check that everything still fits together:
 
 `doctor` reports anything the change broke; see [what doctor checks](commands.md#what-doctor-checks) for the full list.
 
+The file starts with a `$schema` key pointing at `https://inkstead.app/writer/schema/inkstead-writer.json`. Editors that understand JSON Schema use it to check the file and suggest keys as you type. `init` writes it for you, and `migrate` adds it to older sites.
+
 ## Site details
 
 The `site` section controls the public identity of the website:

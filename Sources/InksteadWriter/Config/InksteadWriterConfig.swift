@@ -6,6 +6,7 @@ public enum InksteadWriterMetadata {
     public static let legacyConfigFileName = "inkstead.json"
     public static let executableName = "inkstead-writer"
     public static let cacheDirectoryName = "inkstead-writer"
+    public static let configSchemaURL = "https://inkstead.app/writer/schema/inkstead-writer.json"
 }
 
 public struct LegacyInksteadMetadata: Codable, Equatable {
@@ -436,7 +437,8 @@ public struct InksteadWriterConfig: Codable, Equatable, @unchecked Sendable {
     public var deploy: DeployConfig?
     public var syndication: SyndicationConfig?
 
-    enum CodingKeys: String, CodingKey {
+    enum CodingKeys: String, CodingKey, CaseIterable {
+        case schema = "$schema"
         case legacyInkstead = "inkstead"
         case version
         case site
@@ -530,6 +532,7 @@ public struct InksteadWriterConfig: Codable, Equatable, @unchecked Sendable {
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(InksteadWriterMetadata.configSchemaURL, forKey: .schema)
         try container.encode(version, forKey: .version)
         try container.encode(site, forKey: .site)
         try container.encode(content, forKey: .content)
