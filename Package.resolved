@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ivonunes/plumekit.git",
       "state" : {
-        "revision" : "f155098697dd5bbc9c1bd3d72e2349d3950e4187",
-        "version" : "3.1.1"
+        "revision" : "a48f37293ba6ad8b0c96fb883a1b693191998233",
+        "version" : "3.1.2"
       }
     },
     {
