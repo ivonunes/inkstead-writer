@@ -6,7 +6,7 @@ upstream projects.
 
 | Path | Upstream | Version / revision | License |
 | --- | --- | --- | --- |
-| `libjpeg-turbo` | `https://github.com/libjpeg-turbo/libjpeg-turbo` | `3.2.0` / `6f30092cef9fb839779646608f4ee14ae3cbac989c47fa05e841b0841f09878e` | BSD-style |
+| `libjpeg-turbo` | `https://github.com/libjpeg-turbo/libjpeg-turbo` | `3.2.1` / `c27ad72a68da151177929aa969ae773a2da5ac2af9ce946079314fdac8cece7f` | BSD-style |
 | `libspng` | `https://github.com/randy408/libspng` | `0.7.4` / `47ec02be6c0a6323044600a9221b049f63e1953faf816903e7383d4dc4234487` | BSD-2-Clause |
 | `miniz` | `https://github.com/richgel999/miniz` | `3.1.2` / `98468f8924934b723276680f85238b6c78bf1f8b49b4459cc9b7214a20e2e9fb` | MIT-style |
 | `libwebp` | `https://github.com/webmproject/libwebp` | `1.6.0` / `93a852c2b3efafee3723efd4636de855b46f9fe1efddd607e1f42f60fc8f2136` | BSD-3-Clause |
